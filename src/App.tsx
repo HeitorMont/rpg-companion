@@ -754,6 +754,61 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
     };
   }, [tab]);
 
+// Escuta o evento de "Colar" (Ctrl+V) para invocar imagens diretamente na mesa
+  useEffect(() => {
+    // Apenas o mestre tem o poder de invocar imagens
+    if (!isMestre) return;
+
+    const handlePaste = (e) => {
+      // Pega os itens da área de transferência
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        // Verifica se o que foi colado é uma imagem
+        if (items[i].type.indexOf("image") !== -1) {
+          const blob = items[i].getAsFile();
+          const reader = new FileReader();
+          
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+              // Limita o tamanho inicial para não cobrir a tela inteira (ex: máx 300px)
+              const max = 300;
+              let w = img.width, h = img.height;
+              if (w > max || h > max) {
+                const ratio = Math.min(max / w, max / h);
+                w *= ratio; h *= ratio;
+              }
+
+              // Cria a estrutura exata que o seu ImageObject espera
+              const novaImagem = {
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 6), // ID único
+                x: 50, y: 50, // Nasce no canto superior esquerdo
+                w: Math.round(w), h: Math.round(h),
+                dataUrl: event.target.result,
+                layer: "token" // Nasce sempre na frente (o Mestre pode enviar pro fundo)
+              };
+              
+              // Adiciona ao estado do React
+              setImages(prev => [...prev, novaImagem]);
+            };
+            img.src = event.target.result;
+          };
+          // Transforma o arquivo colado na string base64 que o seu canvas usa
+          reader.readAsDataURL(blob);
+          
+          break; // Para no primeiro arquivo de imagem encontrado para evitar bugs
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    
+    // Limpa o evento quando o componente for desmontado para não acumular magias
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [isMestre]);
+  
   // Save composite (canvas + images) to storage
   useEffect(()=>{
     if(!isMestre)return;
