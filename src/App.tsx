@@ -84,16 +84,6 @@ function ImageObject({img, selected, canSelect, onSelect, onUpdate, onDelete, on
             onMouseDown={e=>startInteraction(e,"resize",h.id)}
             onTouchStart={e=>startInteraction(e,"resize",h.id)}/>
         ))}
-        <div style={{position:"absolute",top:-32,right:0,display:"flex",gap:"6px",zIndex:10}}>
-          <button onClick={e=>{e.stopPropagation();onToggleLayer();}}
-            style={{background:"#f59e0b",color:"#111",border:"none",borderRadius:"4px",padding:"4px 8px",cursor:"pointer",fontSize:"11px",fontWeight:"bold",boxShadow:"0 2px 8px #0008",whiteSpace:"nowrap"}}>
-            {(img.layer==="map") ? "⬆️ Frente" : "⬇️ Fundo"}
-          </button>
-          <button onClick={e=>{e.stopPropagation();onDelete();}}
-            style={{background:"#ef4444",color:"white",border:"none",borderRadius:"4px",padding:"4px 8px",cursor:"pointer",fontSize:"11px",boxShadow:"0 2px 8px #0008",whiteSpace:"nowrap"}}>
-            🗑️ Excluir
-          </button>
-        </div>
       </>}
     </div>
   );
@@ -1023,11 +1013,12 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
         <div style={{background:"#1e293b",padding:"8px 10px",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid #334155"}}>
           {/* Tools */}
           {[["select","🖱️ Selecionar"],["pen","✏️ Caneta"],["eraser","⬜ Borracha"]].map(([t,l])=>(
-            <button key={t} onClick={()=>{setTool(t);if(t!=="select")setSelImg(null);}}
+            <button key={t} onClick={()=>{setTool(t);if(t!=="select")setSelImg([]);}}
               style={{background:tool===t?"#f59e0b":"#111827",color:tool===t?"#111":"#e2e8f0",border:"none",borderRadius:"6px",padding:"6px 10px",cursor:"pointer",fontSize:"12px",fontWeight:"bold"}}>
               {l}
             </button>
           ))}
+          
           {/* Color palette (only for pen) */}
           {tool!=="select"&&tool!=="eraser"&&(
             <div style={{display:"flex",gap:"4px"}}>
@@ -1037,6 +1028,7 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
               ))}
             </div>
           )}
+          
           {/* Brush size */}
           {tool!=="select"&&(
             <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
@@ -1045,13 +1037,44 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
               <span style={{fontSize:"12px",color:"#64748b"}}>{brush}</span>
             </div>
           )}
+
           {/* Select mode hint */}
           {tool==="select"&&images.length===0&&(
             <span style={{fontSize:"12px",color:"#475569",fontStyle:"italic"}}>Adicione uma imagem para selecionar</span>
           )}
-          {tool==="select"&&selImg&&(
-            <span style={{fontSize:"12px",color:"#60a5fa"}}>✓ Imagem selecionada — arraste para mover, handles para redimensionar</span>
+          {tool==="select"&&selImg.length>0&&(
+            <span style={{fontSize:"12px",color:"#60a5fa"}}>✓ Seleção ativa — arraste para mover, handles para redimensionar</span>
           )}
+
+          {/* 🪄 A NOVA BARRA CONTEXTUAL ENTRA AQUI 🪄 */}
+          {selImg.length > 0 && (
+            <div style={{display:"flex", gap:"8px", borderLeft:"2px solid #334155", paddingLeft:"8px", marginLeft:"4px"}}>
+              <button 
+                onClick={() => setImages(prev => prev.map(i => selImg.includes(i.id) ? { ...i, layer: "token" } : i))}
+                style={{background:"#3b82f6", color:"white", border:"none", borderRadius:"6px", padding:"6px 12px", cursor:"pointer", fontWeight:"bold", fontSize:"13px"}}
+                title="Trazer para Frente (Tokens)">
+                ⬆️ Frente
+              </button>
+              
+              <button 
+                onClick={() => setImages(prev => prev.map(i => selImg.includes(i.id) ? { ...i, layer: "map" } : i))}
+                style={{background:"#f59e0b", color:"#111", border:"none", borderRadius:"6px", padding:"6px 12px", cursor:"pointer", fontWeight:"bold", fontSize:"13px"}}
+                title="Enviar para o Fundo (Mapas)">
+                ⬇️ Fundo
+              </button>
+
+              <button 
+                onClick={() => {
+                  setImages(prev => prev.filter(i => !selImg.includes(i.id)));
+                  setSelImg([]); // Limpa a seleção após deletar
+                }}
+                style={{background:"#ef4444", color:"white", border:"none", borderRadius:"6px", padding:"6px 12px", cursor:"pointer", fontWeight:"bold", fontSize:"13px"}}
+                title="Deletar Seleção">
+                🗑️ Excluir
+              </button>
+            </div>
+          )}
+
           <div style={{marginLeft:"auto",display:"flex",gap:"5px"}}>
             <button onClick={()=>fileRef.current?.click()} style={{background:"#111827",color:"#e2e8f0",border:"1px solid #374151",borderRadius:"6px",padding:"6px 10px",cursor:"pointer",fontSize:"12px"}}>🖼️ Imagem</button>
             <button onClick={clearCv} style={{background:"#111827",color:"#ef4444",border:"1px solid #ef4444",borderRadius:"6px",padding:"6px 10px",cursor:"pointer",fontSize:"12px"}}>🗑️ Limpar</button>
