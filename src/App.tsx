@@ -29,24 +29,24 @@ function ImageObject({img, selected, canSelect, onSelect, onUpdate, onDelete, on
     {id:"bc",cx:.5,cy:1,cur:"s-resize"},{id:"br",cx:1,cy:1,cur:"se-resize"},
   ];
 
+  // MAGIA VISUAL: Define a cor baseada na camada atual da imagem
+  // Azul para Tokens (Frente) e Laranja para Mapas (Fundo)
+  const themeColor = img.layer === "map" ? "#f59e0b" : "#3b82f6";
+
   const startInteraction=(e,type,hid)=>{
     e.stopPropagation(); onSelect();
     const isT=!!e.touches; const src=isT?e.touches[0]:e;
     const sx=src.clientX,sy=src.clientY,si={...img};
     
-    // Guarda a última posição do mouse para calcular o movimento (Delta)
     let lastX = sx, lastY = sy; 
 
     const onMove=ev=>{
       const p=ev.touches?ev.touches[0]:ev;
       
       if(type==="move"){
-        // Calcula o quanto o mouse moveu
         const dx = p.clientX - lastX;
         const dy = p.clientY - lastY;
         lastX = p.clientX; lastY = p.clientY;
-        
-        // Manda mover o grupo inteiro!
         if(onMoveGroup) onMoveGroup(dx, dy);
         return;
       }
@@ -71,16 +71,30 @@ function ImageObject({img, selected, canSelect, onSelect, onUpdate, onDelete, on
 
   return(
     <div style={{position:"absolute",left:img.x,top:img.y,width:img.w,height:img.h,
-      border:`2px solid ${selected?"#3b82f6":"transparent"}`,boxSizing:"border-box",
+      // A borda agora muda de cor dependendo de onde a imagem está
+      border:`2px solid ${selected?themeColor:"transparent"}`,boxSizing:"border-box",
       cursor:canSelect?"move":"default",userSelect:"none",
       pointerEvents:canSelect?"all":"none"}}
       onMouseDown={e=>{if(canSelect)startInteraction(e,"move",null)}}
       onTouchStart={e=>{if(canSelect)startInteraction(e,"move",null)}}>
       <img src={img.dataUrl} style={{width:"100%",height:"100%",objectFit:"fill",display:"block",pointerEvents:"none",userSelect:"none",draggable:false}} alt=""/>
+      
       {selected&&<>
+        {/* ETIQUETA INFORMATIVA: Aparece no topo esquerdo da seleção dizendo a camada exata */}
+        <div style={{
+            position: "absolute", top: -22, left: -2, 
+            background: themeColor, color: "#fff", 
+            padding: "2px 8px", borderRadius: "4px 4px 0 0", 
+            fontSize: "11px", fontWeight: "bold", 
+            pointerEvents: "none", whiteSpace: "nowrap"
+        }}>
+           {img.layer === "map" ? "🗺️ Fundo" : "♟️ Frente"}
+        </div>
+
         {HANDLES.map(h=>(
+          // Os pontos de redimensionamento também copiam a cor do tema
           <div key={h.id} style={{position:"absolute",left:`calc(${h.cx*100}% - 5px)`,top:`calc(${h.cy*100}% - 5px)`,
-            width:10,height:10,background:"#3b82f6",border:"2px solid white",borderRadius:"2px",cursor:h.cur,zIndex:10}}
+            width:10,height:10,background:themeColor,border:"2px solid white",borderRadius:"2px",cursor:h.cur,zIndex:10}}
             onMouseDown={e=>startInteraction(e,"resize",h.id)}
             onTouchStart={e=>startInteraction(e,"resize",h.id)}/>
         ))}
