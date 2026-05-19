@@ -970,10 +970,18 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
 
   const clearCv = () => {
     const cv = canvasRef.current, ctx = cv.getContext("2d");
+    
+    // 1. Limpa a lona transparente (respeitando o sistema de Camadas)
     ctx.clearRect(0, 0, cv.width, cv.height);
-    setImages([]); 
-    setSelImg(null);
-    setLinhas([]); // Zera a memória de vetores
+    
+    // 2. Apaga as imagens e reseta a seleção EXATAMENTE como uma lista vazia (Resolve a Tela Branca!)
+    setImages([]);
+    setSelImg([]); 
+    
+    // 3. Destrói o histórico de desenhos (Arte dos Vetores)
+    if (typeof setLinhas === "function") {
+      setLinhas([]);
+    }
   };
 
   // Load image as interactive object
