@@ -21,7 +21,7 @@ const I={background:"#111827",border:"1px solid #374151",borderRadius:"8px",padd
 const SI={...I,padding:"6px 8px",fontSize:"13px"};
 
 /* ── ImageObject ─────────────────────────────────────── */
-function ImageObject({img,selected,canSelect,onSelect,onUpdate,onDelete,onToggleLayer}){
+function ImageObject({img, selected, canSelect, onSelect, onUpdate, onDelete, onToggleLayer, onMoveGroup}){
   const HANDLES=[
     {id:"tl",cx:0,cy:0,cur:"nw-resize"},{id:"tc",cx:.5,cy:0,cur:"n-resize"},
     {id:"tr",cx:1,cy:0,cur:"ne-resize"},{id:"ml",cx:0,cy:.5,cur:"w-resize"},
@@ -33,10 +33,25 @@ function ImageObject({img,selected,canSelect,onSelect,onUpdate,onDelete,onToggle
     e.stopPropagation(); onSelect();
     const isT=!!e.touches; const src=isT?e.touches[0]:e;
     const sx=src.clientX,sy=src.clientY,si={...img};
+    
+    // Guarda a última posição do mouse para calcular o movimento (Delta)
+    let lastX = sx, lastY = sy; 
+
     const onMove=ev=>{
       const p=ev.touches?ev.touches[0]:ev;
+      
+      if(type==="move"){
+        // Calcula o quanto o mouse moveu
+        const dx = p.clientX - lastX;
+        const dy = p.clientY - lastY;
+        lastX = p.clientX; lastY = p.clientY;
+        
+        // Manda mover o grupo inteiro!
+        if(onMoveGroup) onMoveGroup(dx, dy);
+        return;
+      }
+      
       const dx=p.clientX-sx,dy=p.clientY-sy;
-      if(type==="move"){onUpdate({...si,x:si.x+dx,y:si.y+dy});return;}
       let {x,y,w,h}=si;
       if(hid.includes("l")){x=si.x+dx;w=si.w-dx;}
       if(hid.includes("r")){w=si.w+dx;}
@@ -58,7 +73,7 @@ function ImageObject({img,selected,canSelect,onSelect,onUpdate,onDelete,onToggle
     <div style={{position:"absolute",left:img.x,top:img.y,width:img.w,height:img.h,
       border:`2px solid ${selected?"#3b82f6":"transparent"}`,boxSizing:"border-box",
       cursor:canSelect?"move":"default",userSelect:"none",
-      pointerEvents:canSelect?"all":"none"}} // Isso garante que não atrapalhe a caneta!
+      pointerEvents:canSelect?"all":"none"}}
       onMouseDown={e=>{if(canSelect)startInteraction(e,"move",null)}}
       onTouchStart={e=>{if(canSelect)startInteraction(e,"move",null)}}>
       <img src={img.dataUrl} style={{width:"100%",height:"100%",objectFit:"fill",display:"block",pointerEvents:"none",userSelect:"none",draggable:false}} alt=""/>
@@ -69,15 +84,14 @@ function ImageObject({img,selected,canSelect,onSelect,onUpdate,onDelete,onToggle
             onMouseDown={e=>startInteraction(e,"resize",h.id)}
             onTouchStart={e=>startInteraction(e,"resize",h.id)}/>
         ))}
-        {/* Novos botões de controle de camada */}
         <div style={{position:"absolute",top:-32,right:0,display:"flex",gap:"6px",zIndex:10}}>
           <button onClick={e=>{e.stopPropagation();onToggleLayer();}}
             style={{background:"#f59e0b",color:"#111",border:"none",borderRadius:"4px",padding:"4px 8px",cursor:"pointer",fontSize:"11px",fontWeight:"bold",boxShadow:"0 2px 8px #0008",whiteSpace:"nowrap"}}>
-            {(img.layer==="map") ? "⬆️ Trazer p/ Frente" : "⬇️ Enviar p/ Fundo"}
+            {(img.layer==="map") ? "⬆️ Frente" : "⬇️ Fundo"}
           </button>
           <button onClick={e=>{e.stopPropagation();onDelete();}}
             style={{background:"#ef4444",color:"white",border:"none",borderRadius:"4px",padding:"4px 8px",cursor:"pointer",fontSize:"11px",boxShadow:"0 2px 8px #0008",whiteSpace:"nowrap"}}>
-            🗑️ Remover
+            🗑️ Excluir
           </button>
         </div>
       </>}
@@ -600,7 +614,9 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
   
   // Image objects state
   const [images,setImages]=useState([]);
-  const [selImg,setSelImg]=useState(null);
+  const [selImg, setSelImg] = useState([]); // Agora é um Array (Grupo)
+  const [selBox, setSelBox] = useState(null); // Guarda as dimensões do retângulo {x, y, w, h}
+  const selStart = useRef(null); // Guarda onde o clique da seleção começou
   const imagesRef=useRef([]);
   useEffect(()=>{imagesRef.current=images;},[images]);
 
@@ -866,56 +882,83 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
   };
 
   const onDown = e => {
-    if (!isMestre || tool === "select"){
-      if (tool === "select") setSelImg(null); // Para deselecionar facilmente
+    if (!isMestre) return;
+    const p = getP(e);
+    
+    // MAGIA DE SELEÇÃO
+    if (tool === "select") {
+      // Se clicou no vazio (Fundo), começa a desenhar a caixa
+      if (e.target === canvasRef.current || e.target === contRef.current) {
+        setSelImg([]); // Limpa a seleção anterior
+        selStart.current = p; // Marca a origem da caixa
+        setSelBox({ x: p.absX, y: p.absY, w: 0, h: 0 });
+      }
       return;
     }
+
+    // MAGIA DE DESENHO (Inalterada)
     e.preventDefault();
     drawing.current = true;
-    const p = getP(e);
     lastP.current = p;
-    // Salvamos na memória a proporção, não o pixel absoluto!
     linhaAtual.current = { tool, color, brush, points: [{ x: p.relX, y: p.relY }] };
   };
 
   const onMove = e => {
-    if (!isMestre || !drawing.current || tool === "select" || !linhaAtual.current) return;
-    e.preventDefault();
-    const ctx = canvasRef.current.getContext("2d"), p = getP(e);
+    if (!isMestre) return;
+    const p = getP(e);
+
+    // O poder de desenhar o retângulo de seleção em tempo real
+    if (tool === "select" && selBox && selStart.current) {
+      const start = selStart.current;
+      setSelBox({
+        x: Math.min(start.absX, p.absX),
+        y: Math.min(start.absY, p.absY),
+        w: Math.abs(p.absX - start.absX),
+        h: Math.abs(p.absY - start.absY)
+      });
+      return;
+    }
+
+    if (!drawing.current || tool === "select" || !linhaAtual.current) return;
     
-    // 1. RESTAURAÇÃO: Guarda a nova posição matemática na memória dos vetores
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext("2d");
     linhaAtual.current.points.push({ x: p.relX, y: p.relY });
 
-    // 2. Desenha na tela para o Mestre ter feedback imediato
     ctx.beginPath();
     ctx.moveTo(lastP.current.absX, lastP.current.absY);
     ctx.lineTo(p.absX, p.absY);
-    
-    // A MAGIA DA BORRACHA VERDADEIRA
     ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
-    
-    // A cor não importa para a borracha, desde que seja sólida
     ctx.strokeStyle = tool === "eraser" ? "rgba(0,0,0,1)" : color;
     ctx.lineWidth = tool === "eraser" ? brush * 5 : brush;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.stroke();
-    
-    // Retorna para o modo de pintura normal por segurança
     ctx.globalCompositeOperation = "source-over"; 
     
     lastP.current = p;
   };
   
   const onUp = () => {
+    // MAGIA DA CAPTURA: Soltou o mouse? Engole as imagens dentro da caixa!
+    if (tool === "select" && selBox) {
+       const capturados = imagesRef.current.filter(img => {
+          // Checa colisão 2D entre cada imagem e a caixa azul
+          return (
+             img.x < selBox.x + selBox.w &&
+             img.x + img.w > selBox.x &&
+             img.y < selBox.y + selBox.h &&
+             img.y + img.h > selBox.y
+          );
+       }).map(i => i.id); // Pega apenas os IDs
+
+       if (capturados.length > 0) setSelImg(capturados);
+       setSelBox(null);
+       selStart.current = null;
+    }
+
     if (drawing.current && linhaAtual.current) {
-      // 1. Guarda a linha em uma variável imutável antes que o React jogue para a fila
-      const linhaFinalizada = linhaAtual.current;
-      
-      // 2. Salva essa "foto" isolada na memória do estado
-      setLinhas(prev => [...prev, linhaFinalizada]);
-      
-      // 3. Agora sim é seguro limpar a caneta atual!
+      setLinhas(prev => [...prev, linhaAtual.current]);
       linhaAtual.current = null;
     }
     drawing.current = false;
@@ -1024,47 +1067,113 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
       )}
       {/* Canvas container - Sanduíche de Camadas */}
       <div ref={contRef} 
-        style={{flex:1,overflow:"hidden",background:"#111827",position:"relative"}}
-        onClick={(e) => {
-           // Permite clicar no fundo vazio para soltar a imagem
-           if(isMestre && tool === "select" && e.target === e.currentTarget) setSelImg(null);
-        }}>
+        style={{flex:1,overflow:"hidden",background:"#111827",position:"relative", touchAction: "none"}}
+        // 👇 MOVEMOS OS EVENTOS PARA O CONTAINER PARA PEGAR A SELEÇÃO NO FUNDO
+        onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+        onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
+      >
         
-        {/* CAMADA 1: MAPAS (Fica ATRÁS do Canvas) */}
+        {/* CAMADA 1: MAPAS */}
         {isMestre&&(
           <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:1}}>
             {images.filter(i=>i.layer==="map").map(img=>(
-              <ImageObject key={img.id} img={img} selected={selImg===img.id} canSelect={tool==="select"}
-                onSelect={()=>setSelImg(img.id)}
+              <ImageObject key={img.id} img={img} 
+                selected={selImg.includes(img.id)} 
+                canSelect={tool==="select"}
+                onSelect={()=>{
+                    // Se clicar num que não está selecionado, ele vira o único. Se já está, ignora.
+                    if(!selImg.includes(img.id)) setSelImg([img.id]);
+                }}
                 onUpdate={upd=>setImages(p=>p.map(i=>i.id===img.id?upd:i))}
-                onDelete={()=>{setImages(p=>p.filter(i=>i.id!==img.id));setSelImg(null);}}
-                onToggleLayer={()=>setImages(p=>p.map(i=>i.id===img.id?{...i,layer:"token"}:i))} />
+                onDelete={()=>{
+                    // Deleta TODO o grupo se ele fizer parte
+                    if(selImg.includes(img.id)) {
+                       setImages(p=>p.filter(i=>!selImg.includes(i.id)));
+                       setSelImg([]);
+                    } else {
+                       setImages(p=>p.filter(i=>i.id!==img.id));
+                    }
+                }}
+                onToggleLayer={()=>{
+                    // Alterna TODO o grupo
+                    const tLayer = img.layer === "map" ? "token" : "map";
+                    if(selImg.includes(img.id)) {
+                       setImages(p=>p.map(i=>selImg.includes(i.id)?{...i, layer: tLayer}:i));
+                    } else {
+                       setImages(p=>p.map(i=>i.id===img.id?{...i, layer: tLayer}:i));
+                    }
+                }}
+                onMoveGroup={(dx, dy)=>{
+                    // Move TODO o grupo arrastando um só!
+                    if(selImg.includes(img.id)) {
+                       setImages(p=>p.map(i=>selImg.includes(i.id)?{...i, x: i.x+dx, y: i.y+dy}:i));
+                    } else {
+                       setImages(p=>p.map(i=>i.id===img.id?{...i, x: i.x+dx, y: i.y+dy}:i));
+                    }
+                }}
+              />
             ))}
           </div>
         )}
 
-        {/* CAMADA 2: O CANETA/CANVAS (Transparente) */}
+        {/* CAMADA 2: O CANETA/CANVAS */}
         <canvas ref={canvasRef}
           style={{
-            width:"100%", height:"100%", display:"block", touchAction:"none", position:"relative", zIndex:2,
+            width:"100%", height:"100%", display:"block", position:"relative", zIndex:2,
             cursor:isMestre?(tool==="select"?"default":tool==="eraser"?"cell":"crosshair"):"default",
-            // A MAGIA AQUI: Se a ferramenta for 'select', o canvas deixa o clique atravessar!
             pointerEvents: isMestre && tool === "select" ? "none" : "auto" 
           }}
-          onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-          onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}/>
+          // O canvas em si não precisa mais dos eventos no HTML, o container cuidará de tudo!
+        />
           
-        {/* CAMADA 3: TOKENS (Fica na FRENTE do Canvas) */}
+        {/* CAMADA 3: TOKENS */}
         {isMestre&&(
           <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:3}}>
             {images.filter(i=>(i.layer||"token")!=="map").map(img=>(
-              <ImageObject key={img.id} img={img} selected={selImg===img.id} canSelect={tool==="select"}
-                onSelect={()=>setSelImg(img.id)}
+              <ImageObject key={img.id} img={img} 
+                selected={selImg.includes(img.id)} 
+                canSelect={tool==="select"}
+                onSelect={()=>{
+                    if(!selImg.includes(img.id)) setSelImg([img.id]);
+                }}
                 onUpdate={upd=>setImages(p=>p.map(i=>i.id===img.id?upd:i))}
-                onDelete={()=>{setImages(p=>p.filter(i=>i.id!==img.id));setSelImg(null);}}
-                onToggleLayer={()=>setImages(p=>p.map(i=>i.id===img.id?{...i,layer:"map"}:i))} />
+                onDelete={()=>{
+                    if(selImg.includes(img.id)) {
+                       setImages(p=>p.filter(i=>!selImg.includes(i.id)));
+                       setSelImg([]);
+                    } else {
+                       setImages(p=>p.filter(i=>i.id!==img.id));
+                    }
+                }}
+                onToggleLayer={()=>{
+                    const tLayer = img.layer === "map" ? "token" : "map";
+                    if(selImg.includes(img.id)) {
+                       setImages(p=>p.map(i=>selImg.includes(i.id)?{...i, layer: tLayer}:i));
+                    } else {
+                       setImages(p=>p.map(i=>i.id===img.id?{...i, layer: tLayer}:i));
+                    }
+                }}
+                onMoveGroup={(dx, dy)=>{
+                    if(selImg.includes(img.id)) {
+                       setImages(p=>p.map(i=>selImg.includes(i.id)?{...i, x: i.x+dx, y: i.y+dy}:i));
+                    } else {
+                       setImages(p=>p.map(i=>i.id===img.id?{...i, x: i.x+dx, y: i.y+dy}:i));
+                    }
+                }}
+              />
             ))}
           </div>
+        )}
+
+        {/* CAMADA 4: A CAIXA VISUAL DE SELEÇÃO MÚLTIPLA */}
+        {isMestre && tool === "select" && selBox && (
+          <div style={{
+             position: "absolute",
+             left: selBox.x, top: selBox.y, width: selBox.w, height: selBox.h,
+             backgroundColor: "rgba(59, 130, 246, 0.2)",
+             border: "1px solid #3b82f6",
+             pointerEvents: "none", zIndex: 10
+          }} />
         )}
       </div>
     </div>
