@@ -586,7 +586,7 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
   const activeChar=member.charId?chars.find(c=>c.id===member.charId):null;
 
   const TABS=isMestre
-    ?[["dados","🎲"],["personagens","⚔️"],["mestre","🗺️"],["sessao","👥"]]
+    ?[["dados","🎲"],["mestre","🗺️"],["sessao","👥"]]
     :isEsp
     ?[["tela","🗺️"],["sessao","👥"]]
     :[["dados","🎲"],["personagens","⚔️"],["tela","🗺️"],["sessao","👥"]];
@@ -613,6 +613,7 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
   const linhaAtual = useRef(null);
   
   const linhasRef = useRef([]);
+  // 👇 Esta magia garante que a referência atualize instantaneamente sempre que o estado mudar
   useEffect(() => { linhasRef.current = linhas; }, [linhas]);
 
   
@@ -696,22 +697,6 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
     };
     load();const iv=setInterval(load,6000);return()=>clearInterval(iv);
   },[lobby.id]);
-
-  const redesenharVetores = (ctx) => {
-    linhasRef.current.forEach(linha => {
-      if(linha.points.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(linha.points[0].x, linha.points[0].y);
-      for(let i = 1; i < linha.points.length; i++) {
-        ctx.lineTo(linha.points[i].x, linha.points[i].y);
-      }
-      ctx.strokeStyle = linha.tool === "eraser" ? "#111827" : linha.color;
-      ctx.lineWidth = linha.tool === "eraser" ? linha.brush * 5 : linha.brush;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.stroke();
-    });
-  };
 
   useEffect(() => {
     if ((tab !== "mestre" && tab !== "tela") || !contRef.current) return;
@@ -947,14 +932,13 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
     // MAGIA DA CAPTURA: Soltou o mouse? Engole as imagens dentro da caixa!
     if (tool === "select" && selBox) {
        const capturados = imagesRef.current.filter(img => {
-          // Checa colisão 2D entre cada imagem e a caixa azul
           return (
              img.x < selBox.x + selBox.w &&
              img.x + img.w > selBox.x &&
              img.y < selBox.y + selBox.h &&
              img.y + img.h > selBox.y
           );
-       }).map(i => i.id); // Pega apenas os IDs
+       }).map(i => i.id);
 
        if (capturados.length > 0) setSelImg(capturados);
        setSelBox(null);
@@ -962,7 +946,9 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
     }
 
     if (drawing.current && linhaAtual.current) {
-      setLinhas(prev => [...prev, linhaAtual.current]);
+      const novaLista = [...linhas, linhaAtual.current];
+      linhasRef.current = novaLista; // Atualiza a ponte de memória ANTES do re-render
+      setLinhas(novaLista);          // Atualiza o estado do React
       linhaAtual.current = null;
     }
     drawing.current = false;
@@ -1001,7 +987,7 @@ function GameScreen({user,lobby,member,chars,onLeave,onSaveChar,onDeleteChar}){
         const id=mkId();
         setImages(p=>[...p,{id,dataUrl,x,y,w,h}]);
         setTool("select");
-        setSelImg(id);
+        setSelImg([id]);
       };
       el.src=dataUrl;
     };
