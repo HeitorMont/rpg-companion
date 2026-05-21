@@ -1,4 +1,5 @@
 // src/App.tsx
+import { supabase } from "./lib/supabase";
 import { useState, useEffect } from "react";
 import type { User, Lobby, Character, Member } from "./types";
 import LoginScreen from "./components/LoginScreen";
@@ -49,31 +50,94 @@ export default function App() {
     })();
   }, []);
 
+  // 🔮 Carrega todas as fichas do usuário direto da nuvem
   const loadChars = async (uname: string) => {
     try {
-      // @ts-ignore
-      const r = await window.storage.list(`rpg_char:${uname}:`, true);
-      if (r?.keys?.length) {
-        // @ts-ignore
-        const loaded = (await Promise.all(r.keys.map(async (k: string) => { try { const d = await window.storage.get(k, true); return d ? JSON.parse(d.value) : null; } catch { return null; } }))).filter(Boolean);
-        setChars(loaded);
-      } else setChars([]);
-    } catch { setChars([]); }
+      const { data: loaded, error } = await supabase
+        .from("characters")
+        .select("*")
+        .eq("owner", uname);
+
+      if (error) throw error;
+
+      if (loaded) {
+        // Converte o formato do banco de dados (snake_case) de volta para o TypeScript (camelCase) se necessário
+        const adaptados = loaded.map(c => ({
+          id: c.id,
+          owner: c.owner,
+          name: c.name,
+          classe: c.classe,
+          raca: c.raca,
+          nivel: c.nivel,
+          hp: c.hp,
+          hpMax: c.hp_max, // ✨ Adaptação das colunas do Postgres
+          vigor: c.vigor,
+          vigorMax: c.vigor_max, // ✨ Adaptação das colunas do Postgres
+          bonuses: c.bonuses,
+          skills: c.skills,
+          notes: c.notes
+        }));
+        setChars(adaptados);
+      } else {
+        setChars([]);
+      }
+    } catch {
+      setChars([]);
+    }
   };
 
+  // 🔮 Salva ou atualiza uma ficha na nuvem em tempo real
   const saveChar = async (c: Character) => {
     if (!user) return;
     const ch = { ...c, owner: user.username };
+    
+    // Atualiza o estado local para o feedback visual ser instantâneo
     setChars(p => p.find(x => x.id === ch.id) ? p.map(x => x.id === ch.id ? ch : x) : [...p, ch]);
-    // @ts-ignore
-    try { await window.storage.set(`rpg_char:${user.username}:${ch.id}`, JSON.stringify(ch), true); } catch {}
+
+    try {
+      // Prepara os dados no formato snake_case exigido pelas colunas do PostgreSQL
+      const payload = {
+        id: ch.id,
+        owner: ch.owner,
+        name: ch.name,
+        classe: ch.classe,
+        raca: ch.raca,
+        nivel: ch.nivel,
+        hp: ch.hp,
+        hp_max: ch.hpMax,
+        vigor: ch.vigor,
+        vigor_max: ch.vigorMax,
+        bonuses: ch.bonuses,
+        skills: ch.skills,
+        notes: ch.notes
+      };
+
+      // O comando "upsert" insere se não existir, ou atualiza se o "id" já estiver no banco
+      const { error } = await supabase
+        .from("characters")
+        .upsert(payload);
+
+      if (error) throw error;
+    } catch (e) {
+      console.error("Erro ao salvar personagem no Supabase:", e);
+    }
   };
 
+  // 🔮 Deleta a ficha permanentemente do banco online
   const deleteChar = async (id: string) => {
     if (!user) return;
     setChars(p => p.filter(c => c.id !== id));
-    // @ts-ignore
-    try { await window.storage.delete(`rpg_char:${user.username}:${id}`, true); } catch {}
+    
+    try {
+      const { error } = await supabase
+        .from("characters")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+    } catch (e) {
+      console.error("Erro ao deletar personagem no Supabase:", e);
+    }
   };
 
   const logout = async () => {
