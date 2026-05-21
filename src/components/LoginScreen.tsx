@@ -1,6 +1,7 @@
 // src/components/LoginScreen.tsx
 import { useState } from "react";
 import type { User } from "../types";
+import { supabase } from "../lib/supabase"; // 👈 Invocando a ponte oficial do Supabase
 
 export const hashPw = (s: string) => {
   let h = 5381;
@@ -23,7 +24,6 @@ interface LoginScreenProps {
   onLogin: (user: User) => void;
 }
 
-// Controla as fases das nossas janelas no portal
 type ScreenMode = "login" | "register" | "success";
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
@@ -46,25 +46,29 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     if (!u.trim() || !p.trim()) { setErr("Preencha todos os campos."); return; }
     setLoading(true);
     
-    const key = `rpg_user:${u.trim().toLowerCase()}`;
+    const usernameLower = u.trim().toLowerCase();
     const pw = hashPw(p);
     
     try {
-      let ex = null;
-      try {
-        // @ts-ignore
-        const r = await window.storage.get(key, true);
-        if (r) ex = JSON.parse(r.value);
-      } catch {}
+      // 🔮 Consulta real na tabela online do PostgreSQL
+      const { data: ex, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("username", usernameLower)
+        .maybeSingle();
+
+      if (error) throw error;
       
       if (!ex) { setErr("Usuário não encontrado."); setLoading(false); return; }
-      if (ex.pwHash !== pw) { setErr("Senha incorreta."); setLoading(false); return; }
+      if (ex.pw_hash !== pw) { setErr("Senha incorreta."); setLoading(false); return; }
       
-      // @ts-ignore
+      // @ts-ignore - Mantém compatibilidade com a sessão do App.tsx temporariamente
       await window.storage.set("rpg_sess", JSON.stringify({ username: ex.username, pwHash: pw }));
-      onLogin(ex);
+      
+      // Converte o retorno do banco para o tipo User do TypeScript
+      onLogin({ username: ex.username, pwHash: ex.pw_hash, createdAt: ex.created_at });
     } catch { 
-      setErr("Erro de armazenamento."); 
+      setErr("Erro de conexão com o servidor online."); 
     }
     setLoading(false);
   };
@@ -77,30 +81,33 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     if (p !== confirmP) { setErr("As senhas informadas não coincidem."); return; }
     setLoading(true);
     
-    const key = `rpg_user:${u.trim().toLowerCase()}`;
+    const usernameLower = u.trim().toLowerCase();
     const pw = hashPw(p);
     
     try {
-      let ex = null;
-      try {
-        // @ts-ignore
-        const r = await window.storage.get(key, true);
-        if (r) ex = JSON.parse(r.value);
-      } catch {}
-      
+      // 🔮 Verifica em tempo real na nuvem se o nome já foi pego
+      const { data: ex, error: checkError } = await supabase
+        .from("users")
+        .select("username")
+        .eq("username", usernameLower)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
       if (ex) { setErr("Usuário já existe. Escolha outro nome."); setLoading(false); return; }
       
-      const usr: User = { username: u.trim(), pwHash: pw, createdAt: Date.now() };
-      // @ts-ignore
-      await window.storage.set(key, JSON.stringify(usr), true);
+      // 🔮 Insere as runas do novo jogador direto no banco online
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert([{ username: usernameLower, pw_hash: pw, created_at: Date.now() }]);
+
+      if (insertError) throw insertError;
       
-      // Transita para a janela de confirmação de sucesso
       setMode("success");
       setP("");
       setConfirmP("");
       setErr("");
     } catch { 
-      setErr("Erro ao salvar a conta."); 
+      setErr("Erro ao forjar a conta no servidor online."); 
     }
     setLoading(false);
   };
@@ -109,14 +116,13 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     <div style={{ minHeight: "100vh", background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
       <div style={{ width: "100%", maxWidth: "370px" }}>
         
-        {/* Logo imutável do sistema */}
         <div style={{ textAlign: "center", marginBottom: "28px" }}>
           <div style={{ fontSize: "56px", marginBottom: "8px" }}>🎲</div>
           <h1 style={{ color: "#f59e0b", fontFamily: "Georgia", fontSize: "28px", margin: 0 }}>RPG Companion</h1>
           <p style={{ color: "#64748b", margin: "8px 0 0", fontSize: "14px" }}>Mesa Digital para Mestres e Jogadores</p>
         </div>
 
-        {/* ── JANELA 1: PORTAL DE ENTRADA (LOGIN) ── */}
+        {/* JANELA 1: LOGIN */}
         {mode === "login" && (
           <div style={{ background: "#1e293b", borderRadius: "14px", padding: "24px", display: "grid", gap: "14px" }}>
             <h2 style={{ color: "#f59e0b", margin: "0 0 2px", fontSize: "18px", fontFamily: "Georgia" }}>Entrar na Sessão</h2>
@@ -142,7 +148,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         )}
 
-        {/* ── JANELA 2: FORJA DE CONTA (REGISTRO) ── */}
+        {/* JANELA 2: REGISTRO */}
         {mode === "register" && (
           <div style={{ background: "#1e293b", borderRadius: "14px", padding: "24px", display: "grid", gap: "14px" }}>
             <h2 style={{ color: "#f59e0b", margin: "0 0 2px", fontSize: "18px", fontFamily: "Georgia" }}>Forjar Nova Conta</h2>
@@ -161,7 +167,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             {err && <div style={{ color: "#f87171", fontSize: "13px", padding: "8px 10px", background: "#1c0a0a", borderRadius: "6px" }}>⚠️ {err}</div>}
             
             <button onClick={handleRegister} disabled={loading} style={{ background: "#22c55e", color: "#111", border: "none", borderRadius: "8px", padding: "12px", fontSize: "15px", fontWeight: "bold", cursor: loading ? "wait" : "pointer", boxShadow: "0 4px 14px #22c55e44" }}>
-              {loading ? "Gravando runas..." : "⚔️ Confirmar Criação"}
+              {loading ? "Gravando no banco..." : "⚔️ Confirmar Criação"}
             </button>
             
             <button onClick={() => { setMode("login"); clearForm(); }} style={{ background: "transparent", color: "#64748b", border: "1px solid #374151", borderRadius: "8px", padding: "12px", fontSize: "14px", cursor: "pointer" }}>
@@ -170,13 +176,13 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         )}
 
-        {/* ── JANELA 3: CONFIRMAÇÃO DE SUCESSO ── */}
+        {/* JANELA 3: SUCESSO */}
         {mode === "success" && (
           <div style={{ background: "#1e293b", borderRadius: "14px", padding: "24px", display: "grid", gap: "14px", textAlign: "center" }}>
             <div style={{ fontSize: "48px" }}>✨</div>
             <h2 style={{ color: "#22c55e", margin: 0, fontSize: "20px", fontFamily: "Georgia" }}>Aventureiro Registrado!</h2>
             <p style={{ color: "#94a3b8", fontSize: "14px", margin: "4px 0 12px", lineHeight: "1.6" }}>
-              As crônicas da taverna foram atualizadas. O usuário <strong style={{ color: "#e2e8f0" }}>{u}</strong> está pronto para iniciar sua jornada.
+              As crônicas da taverna foram salvas na nuvem. O usuário <strong style={{ color: "#e2e8f0" }}>{u}</strong> está pronto para iniciar sua jornada.
             </p>
             <button onClick={() => { setMode("login"); clearForm(); }} style={{ background: "#f59e0b", color: "#111", border: "none", borderRadius: "8px", padding: "12px", fontSize: "15px", fontWeight: "bold", cursor: "pointer", boxShadow: "0 4px 14px #f59e0b44" }}>
               Avançar para o Login →
