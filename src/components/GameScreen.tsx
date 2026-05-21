@@ -208,10 +208,10 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
             </div>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: "5px" }}>
-            <button onClick={() => cv.canvasRef.current?.click()} style={{ background: "#111827", color: "#e2e8f0", border: "1px solid #374151", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px" }}>🖼️ Imagem</button>
+            <button onClick={() => cv.fileRef.current?.click()} style={{ background: "#111827", color: "#e2e8f0", border: "1px solid #374151", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px" }}>🖼️ Imagem</button>
             <button onClick={cv.clearCv} style={{ background: "#111827", color: "#ef4444", border: "1px solid #ef4444", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px" }}>🗑️ Limpar</button>
           </div>
-          <input ref={cv.canvasRef as any} type="file" accept="image/*" style={{ display: "none" }} onChange={cv.loadImg} />
+          <input ref={cv.fileRef as any} type="file" accept="image/*" style={{ display: "none" }} onChange={cv.loadImg} />
         </div>
       )}
       {!isMestre && (

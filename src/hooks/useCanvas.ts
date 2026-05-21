@@ -15,14 +15,15 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const contRef = useRef<HTMLDivElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null); 
   const drawing = useRef(false);
-  const lastP = useRef<{ absX: number; absY: number; relX: number; relY: number } | null>(null);
+  const lastP = useRef<{ absX: number; absY: number; relX: number; relY: number; cssX: number; cssY: number } | null>(null);
   const lastSave = useRef(0);
   const canvasOk = useRef(false);
   const linhaAtual = useRef<Linha | null>(null);
   const linhasRef = useRef<Linha[]>([]);
   const imagesRef = useRef<ImageObj[]>([]);
-  const selStart = useRef<{ absX: number; absY: number; relX: number; relY: number } | null>(null);
+  const selStart = useRef<{ absX: number; absY: number; relX: number; relY: number; cssX: number; cssY: number } | null>(null);
 
   useEffect(() => { linhasRef.current = linhas; }, [linhas]);
   useEffect(() => { imagesRef.current = images; }, [images]);
@@ -220,13 +221,15 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
   const getP = (e: any) => {
     const cv = canvasRef.current, r = cv?.getBoundingClientRect();
-    if (!cv || !r) return { absX: 0, absY: 0, relX: 0, relY: 0 };
+    if (!cv || !r) return { absX: 0, absY: 0, relX: 0, relY: 0, cssX: 0, cssY: 0 };
     const s = e.touches ? e.touches[0] : e;
     return {
       absX: (s.clientX - r.left) * (cv.width / r.width),
       absY: (s.clientY - r.top) * (cv.height / r.height),
       relX: (s.clientX - r.left) / r.width,
-      relY: (s.clientY - r.top) / r.height
+      relY: (s.clientY - r.top) / r.height,
+      cssX: s.clientX - r.left, // 👈 Nova runa: Posição exata do mouse na tela (CSS)
+      cssY: s.clientY - r.top   // 👈 Nova runa: Posição exata do mouse na tela (CSS)
     };
   };
 
@@ -237,7 +240,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       if (e.target === canvasRef.current || e.target === contRef.current) {
         setSelImg([]);
         selStart.current = p;
-        setSelBox({ x: p.absX, y: p.absY, w: 0, h: 0 });
+        setSelBox({ x: p.cssX, y: p.cssY, w: 0, h: 0 }); // 👈 Corrigido: Inicia no local exato do mouse
       }
       return;
     }
@@ -253,10 +256,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     if (tool === "select" && selBox && selStart.current) {
       const start = selStart.current;
       setSelBox({
-        x: Math.min(start.absX, p.absX),
-        y: Math.min(start.absY, p.absY),
-        w: Math.abs(p.absX - start.absX),
-        h: Math.abs(p.absY - start.absY)
+        x: Math.min(start.cssX, p.cssX), // 👈 Corrigido: Segue o mouse em tempo real
+        y: Math.min(start.cssY, p.cssY), // 👈 Corrigido: Sem defasagem de escala
+        w: Math.abs(p.cssX - start.cssX),
+        h: Math.abs(p.cssY - start.cssY)
       });
       return;
     }
@@ -335,6 +338,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   return {
     tool, setTool, color, setColor, brush, setBrush,
     linhas, setLinhas, images, setImages, selImg, setSelImg, selBox,
-    canvasRef, contRef, clearCv, loadImg, onDown, onMove, onUp
+    canvasRef, contRef,fileRef, clearCv, loadImg, onDown, onMove, onUp
   };
 }
