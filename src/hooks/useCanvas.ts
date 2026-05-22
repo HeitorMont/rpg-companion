@@ -10,7 +10,7 @@ const MUNDO_W = 2000;
 const MUNDO_H = 2000;
 
 export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
-  const [tool, setTool] = useState(isMestre ? "pen" : "pan"); // Jogadores começam com a mãozinha por padrão
+  const [tool, setTool] = useState(isMestre ? "pen" : "pan"); 
   const [color, setColor] = useState("#ef4444");
   const [brush, setBrush] = useState(5);
   const [linhas, setLinhas] = useState<Linha[]>([]);
@@ -166,7 +166,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       }
     });
 
-    // Restaura o contexto para desenhar elementos fixos de interface (como a caixa de seleção)
+    // Restaura o contexto para desenhar elementos fixos de interface
     ctx.restore();
   }, [isMestre]);
 
@@ -243,15 +243,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      // Calcula onde o mouse estava apontando dentro do mundo fixo antes do zoom
       const mundoX = (mouseX - panXRef.current) / zoomRef.current;
       const mundoY = (mouseY - panYRef.current) / zoomRef.current;
 
-      // Determina o multiplicador de zoom
       const fator = e.deltaY < 0 ? 1.1 : 1 / 1.1;
       const novoZoom = Math.min(Math.max(zoomRef.current * fator, 0.15), 4);
 
-      // Ajusta o Pan para que o ponto do mouse permaneça travado sob o cursor pós-zoom
       const novoPanX = mouseX - mundoX * novoZoom;
       const novoPanY = mouseY - mundoY * novoZoom;
 
@@ -264,7 +261,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     return () => el.removeEventListener("wheel", handleWheel);
   }, [tab]);
 
-  // 📐 TRADUTOR INTERDIMENSIONAL (Converte cliques da tela do monitor para coordenadas do Mundo Fixo)
+  // 📐 TRADUTOR INTERDIMENSIONAL
   const obterPosicaoMundo = (e: any) => {
     const cv = canvasRef.current;
     if (!cv) return { x: 0, y: 0, screenX: 0, screenY: 0 };
@@ -286,7 +283,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     const p = obterPosicaoMundo(e);
     lastP.current = { x: p.x, y: p.y };
 
-    // Caso A: Ferramenta de Mãozinha (Pan) ou botão do meio do mouse pressionado
     if (tool === "pan" || e.button === 1) {
       panning.current = true;
       startPan.current = { x: p.screenX - panXRef.current, y: p.screenY - panYRef.current };
@@ -295,27 +291,22 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
     if (!isMestre) return;
 
-    // Caso B: Ferramenta de Seleção e Movimentação de Tokens
     if (tool === "select") {
-      // Verifica se clicamos em cima de algum token (começando pelos da frente)
       const tokenClicado = [...imagesRef.current]
         .reverse()
         .find(img => p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h);
 
       if (tokenClicado) {
         movingTokens.current = true;
-        // Se o token clicado já faz parte da seleção múltipla, move o grupo todo, senão seleciona só ele
         const novoGrupo = selImgRef.current.includes(tokenClicado.id) ? selImgRef.current : [tokenClicado.id];
         setSelImg(novoGrupo);
 
-        // Guarda a posição inicial de todos do grupo para calcular o arrasto relativo
         const posicoes: Record<string, { x: number; y: number }> = {};
         imagesRef.current.forEach(img => {
           if (novoGrupo.includes(img.id)) posicoes[img.id] = { x: img.x, y: img.y };
         });
         startTokenPos.current = posicoes;
       } else {
-        // Clicou no vazio: limpa seleção e abre caixa de seleção múltipla
         setSelImg([]);
         selStartMundo.current = { x: p.x, y: p.y };
         setSelBox({ x: p.x, y: p.y, w: 0, h: 0 });
@@ -323,7 +314,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       return;
     }
 
-    // Caso C: Ferramentas de Desenho (Caneta/Borracha)
     e.preventDefault();
     drawing.current = true;
     linhaAtual.current = { tool, color, brush, points: [{ x: p.x, y: p.y }] };
@@ -342,7 +332,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
     if (tool === "select") {
       if (movingTokens.current && lastP.current) {
-        // Calcula o deslocamento no mundo virtual baseado no ponto inicial do clique original
         const dx = p.x - lastP.current.x;
         const dy = p.y - lastP.current.y;
 
@@ -380,7 +369,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     movingTokens.current = false;
 
     if (tool === "select" && selBox) {
-      // Captura todos os tokens que estão dentro do retângulo desenhado no mundo virtual
       const capturados = imagesRef.current.filter(img => {
         return (
           img.x < selBox.x + selBox.w && img.x + img.w > selBox.x &&
@@ -418,7 +406,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       const dataUrl = ev.target.result;
       const el = new Image();
       el.onload = () => {
-        // Insere a nova imagem centralizada no meio do mapa fixo
         const w = Math.min(el.width, 500);
         const h = Math.min(el.height, 500);
         const x = Math.round((MUNDO_W - w) / 2);
@@ -433,7 +420,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     fr.readAsDataURL(f); e.target.value = "";
   };
 
-  // Atalho por Ctrl+V nativo
   useEffect(() => {
     if (!isMestre) return;
     const handlePaste = (e: ClipboardEvent) => {
@@ -466,6 +452,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     tool, setTool, color, setColor, brush, setBrush,
     linhas, setLinhas, images, setImages, selImg, setSelImg, selBox,
     canvasRef, contRef, fileRef, clearCv, loadImg, onDown, onMove, onUp,
-    zoom, panX, panY // Exportando os dados de câmera para renderizações extras se necessário
+    zoom, panX, panY 
   };
 }
