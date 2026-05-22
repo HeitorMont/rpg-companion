@@ -27,7 +27,8 @@ export default function App() {
             if (ur) {
               const u = JSON.parse(ur.value);
               if (u.pwHash === pwHash) {
-                setUser(u); await loadChars(u.username);
+                setUser(u); 
+                await loadChars(u.username, pwHash);
                 try {
                   const cr = await window.storage.get("rpg_cur");
                   if (cr) { 
@@ -46,18 +47,19 @@ export default function App() {
     })();
   }, []);
 
-  // 🔮 Carrega todas as fichas do usuário direto da nuvem
-  const loadChars = async (uname: string) => {
+// 🔮 Injetado o pwhash direto como parâmetro para evitar o bug de estado nulo do React!
+  const loadChars = async (uname: string, pwHash: string) => {
     try {
       const { data: loaded, error } = await supabase
-        .from("characters")
-        .select("*")
-        .eq("owner", uname);
+        .rpc("buscar_meus_personagens", {
+          p_username: uname,
+          p_pwhash: pwHash 
+        });
 
       if (error) throw error;
 
       if (loaded) {
-        const adaptados = loaded.map(c => ({
+        const adaptados = loaded.map((c: any) => ({
           id: c.id,
           owner: c.owner,
           name: c.name,
@@ -76,12 +78,12 @@ export default function App() {
       } else {
         setChars([]);
       }
-    } catch {
+    } catch (e) {
+      console.error("Erro ao buscar personagens:", e);
       setChars([]);
     }
   };
 
-  // 🔮 Salva ou atualiza uma ficha na nuvem em tempo real
   const saveChar = async (c: Character) => {
     if (!user) return;
     const ch = { ...c, owner: user.username };
@@ -89,49 +91,48 @@ export default function App() {
     setChars(p => p.find(x => x.id === ch.id) ? p.map(x => x.id === ch.id ? ch : x) : [...p, ch]);
 
     try {
-      const payload = {
-        id: ch.id,
-        owner: ch.owner,
-        name: ch.name,
-        classe: ch.classe,
-        raca: ch.raca,
-        nivel: ch.nivel,
-        hp: ch.hp,
-        hp_max: ch.hpMax,
-        vigor: ch.vigor,
-        vigor_max: ch.vigorMax,
-        bonuses: ch.bonuses,
-        skills: ch.skills,
-        notes: ch.notes
-      };
-
       const { error } = await supabase
-        .from("characters")
-        .upsert(payload);
+        .rpc("salvar_meu_personagem", {
+          p_username: user.username,
+          p_pwhash: user.pwHash, // Aqui está seguro usar o estado pois já estamos logados há tempo dentro do jogo
+          p_id: ch.id,
+          p_name: ch.name,
+          p_classe: ch.classe,
+          p_raca: ch.raca,
+          p_nivel: ch.nivel,
+          p_hp: ch.hp,
+          p_hp_max: ch.hpMax,
+          p_vigor: ch.vigor,
+          p_vigor_max: ch.vigorMax,
+          p_bonuses: ch.bonuses,
+          p_skills: ch.skills,
+          p_notes: ch.notes
+        });
 
       if (error) throw error;
     } catch (e) {
-      console.error("Erro ao salvar personagem no Supabase:", e);
+      console.error("Erro ao salvar personagem:", e);
     }
   };
 
-  // 🔮 Deleta a ficha permanentemente do banco online
+  // 🔮 Nova deleção via RPC recomendada pelo Claude!
   const deleteChar = async (id: string) => {
     if (!user) return;
     setChars(p => p.filter(c => c.id !== id));
     
     try {
       const { error } = await supabase
-        .from("characters")
-        .delete()
-        .eq("id", id);
+        .rpc("deletar_meu_personagem", {
+          p_username: user.username,
+          p_pwhash: user.pwHash,
+          p_id: id
+        });
 
       if (error) throw error;
     } catch (e) {
-      console.error("Erro ao deletar personagem no Supabase:", e);
+      console.error("Erro ao deletar personagem:", e);
     }
   };
-
   const logout = async () => {
     try { await window.storage.delete("rpg_sess"); } catch {}
     if (member && lobby && user) {
@@ -149,7 +150,15 @@ export default function App() {
     </div>
   );
 
-  if (screen === "login") return <LoginScreen onLogin={async u => { setUser(u); await loadChars(u.username); setScreen("lobbies"); }} />;
+  if (screen === "login") return (
+    <LoginScreen 
+      onLogin={async u => { 
+        setUser(u); 
+        await loadChars(u.username, u.pwHash); // 🔮 Passando os dois dados direto!
+        setScreen("lobbies"); 
+      }} 
+    />
+  );
   if (screen === "lobbies" && user) return <LobbyBrowser user={user} chars={chars} onEnterLobby={l => { setLobby(l); setScreen("role"); }} onLogout={logout} onSaveChar={saveChar} onDeleteChar={deleteChar} />;
   if (screen === "role" && user && lobby) return <RoleSelect user={user} lobby={lobby} chars={chars} onJoin={m => { setMember(m); setScreen("game"); }} onCreateChar={() => setCreatingChar(true)} onBack={() => setScreen("lobbies")} />;
   if (screen === "game" && user && lobby && member) return (
