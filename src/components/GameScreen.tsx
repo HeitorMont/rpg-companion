@@ -1,6 +1,6 @@
 // src/components/GameScreen.tsx
 import { useState, useEffect } from "react";
-import type { User, Lobby, Character, Member, ImageObj } from "../types";
+import type { User, Lobby, Character, Member } from "../types";
 import { useCanvas } from "../hooks/useCanvas";
 import { supabase } from "../lib/supabase"; 
 import CharEditor from "./CharEditor";
@@ -29,69 +29,6 @@ const I = {
   width: "100%",
   boxSizing: "border-box" as const,
 };
-
-/* ── ImageObject ─────────────────────────────────────── */
-interface ImageObjectProps {
-  img: ImageObj; selected: boolean; canSelect: boolean;
-  onSelect: () => void; onUpdate: (u: ImageObj) => void; onDelete: () => void;
-  onToggleLayer: () => void; onMoveGroup: (dx: number, dy: number) => void;
-}
-
-function ImageObject({ img, selected, canSelect, onSelect, onUpdate, onDelete, onToggleLayer, onMoveGroup }: ImageObjectProps) {
-  void onDelete; void onToggleLayer; 
-  const HANDLES = [
-    { id: "tl", cx: 0, cy: 0, cur: "nw-resize" }, { id: "tc", cx: .5, cy: 0, cur: "n-resize" },
-    { id: "tr", cx: 1, cy: 0, cur: "ne-resize" }, { id: "ml", cx: 0, cy: .5, cur: "w-resize" },
-    { id: "mr", cx: 1, cy: .5, cur: "e-resize" }, { id: "bl", cx: 0, cy: 1, cur: "sw-resize" },
-    { id: "bc", cx: .5, cy: 1, cur: "s-resize" }, { id: "br", cx: 1, cy: 1, cur: "se-resize" },
-  ];
-  const themeColor = img.layer === "map" ? "#f59e0b" : "#3b82f6";
-
-  const startInteraction = (e: any, type: "move" | "resize", hid: string | null) => {
-    e.stopPropagation(); onSelect();
-    const isT = !!e.touches; const src = isT ? e.touches[0] : e;
-    const sx = src.clientX, sy = src.clientY, si = { ...img };
-    let lastX = sx, lastY = sy;
-
-    const onMove = (ev: any) => {
-      const p = ev.touches ? ev.touches[0] : ev;
-      if (type === "move") {
-        const dx = p.clientX - lastX; const dy = p.clientY - lastY;
-        lastX = p.clientX; lastY = p.clientY;
-        if (onMoveGroup) onMoveGroup(dx, dy); return;
-      }
-      const dx = p.clientX - sx, dy = p.clientY - sy;
-      let { x, y, w, h } = si;
-      if (hid?.includes("l")) { x = si.x + dx; w = si.w - dx; }
-      if (hid?.includes("r")) { w = si.w + dx; }
-      if (hid?.includes("t")) { y = si.y + dy; h = si.h - dy; }
-      if (hid?.includes("b")) { h = si.h + dy; }
-      if (w < 30) { if (hid?.includes("l")) x = si.x + si.w - 30; w = 30; }
-      if (h < 30) { if (hid?.includes("t")) y = si.y + si.h - 30; h = 30; }
-      onUpdate({ ...si, x, y, w, h });
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp);
-    };
-    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchmove", onMove, { passive: false }); window.addEventListener("touchend", onUp);
-  };
-
-  return (
-    <div style={{ position: "absolute", left: img.x, top: img.y, width: img.w, height: img.h, border: `2px solid ${selected ? themeColor : "transparent"}`, boxSizing: "border-box", cursor: canSelect ? "move" : "default", userSelect: "none", pointerEvents: canSelect ? "all" : "none" }} onMouseDown={e => canSelect && startInteraction(e, "move", null)} onTouchStart={e => canSelect && startInteraction(e, "move", null)}>
-      <img src={img.dataUrl} style={{ width: "100%", height: "100%", objectFit: "fill", display: "block", pointerEvents: "none", userSelect: "none" }} alt="" />
-      {selected && <>
-        <div style={{ position: "absolute", top: -22, left: -2, background: themeColor, color: "#fff", padding: "2px 8px", borderRadius: "4px 4px 0 0", fontSize: "11px", fontWeight: "bold", pointerEvents: "none", whiteSpace: "nowrap" }}>
-          {img.layer === "map" ? "🗺️ Fundo" : "♟️ Frente"}
-        </div>
-        {HANDLES.map(h => (
-          <div key={h.id} style={{ position: "absolute", left: `calc(${h.cx * 100}% - 5px)`, top: `calc(${h.cy * 100}% - 5px)`, width: 10, height: 10, background: themeColor, border: "2px solid white", borderRadius: "2px", cursor: h.cur, zIndex: 10 }} onMouseDown={e => startInteraction(e, "resize", h.id)} onTouchStart={e => startInteraction(e, "resize", h.id)} />
-        ))}
-      </>}
-    </div>
-  );
-}
 
 /* ── SkillPanel ──────────────────────────────────────── */
 function SkillPanel({ char }: { char: Character | null }) {
@@ -123,7 +60,7 @@ function SkillPanel({ char }: { char: Character | null }) {
 interface GameScreenProps {
   user: User; lobby: Lobby; member: Member; chars: Character[];
   onLeave: () => void; onSaveChar: (c: Character) => Promise<void> | void; onDeleteChar: (id: string) => Promise<void> | void;
-  onUpdateMember: (m: Member) => void; // 🔮 Prop para disparar atualização reativa no pai
+  onUpdateMember: (m: Member) => void; 
 }
 
 export default function GameScreen({ user, lobby, member, chars, onLeave, onSaveChar, onDeleteChar, onUpdateMember }: GameScreenProps) {
@@ -199,7 +136,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
     return () => { supabase.removeChannel(canalPresenca); };
   }, [lobby.id]);
 
-  // 🔮 Transmutação dinâmica de papéis e fichas ativa
   const handleSwitchRoleInsideGame = async (newRole: "mestre" | "jogador" | "espectador", chosenCharId: string | null) => {
     try {
       const timestamp = Date.now();
@@ -265,17 +201,17 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 110px)" }}>
       {isMestre && (
         <div style={{ background: "#1e293b", padding: "8px 10px", display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", borderBottom: "1px solid #334155" }}>
-          {[["select", "🖱️ Selecionar"], ["pen", "✏️ Caneta"], ["eraser", "⬜ Borracha"]].map(([t, l]) => (
+          {[["pan", "🖐️ Arrastar"], ["select", "🖱️ Selecionar"], ["pen", "✏️ Caneta"], ["eraser", "⬜ Borracha"]].map(([t, l]) => (
             <button key={t} onClick={() => { cv.setTool(t); if (t !== "select") cv.setSelImg([]); }} style={{ background: cv.tool === t ? "#f59e0b" : "#111827", color: cv.tool === t ? "#111" : "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>{l}</button>
           ))}
-          {cv.tool !== "select" && cv.tool !== "eraser" && (
+          {cv.tool !== "select" && cv.tool !== "eraser" && cv.tool !== "pan" && (
             <div style={{ display: "flex", gap: "4px" }}>
               {PAL.map(cl => (
                 <button key={cl} onClick={() => { cv.setColor(cl); cv.setTool("pen"); }} style={{ width: "22px", height: "22px", background: cl, border: cv.color === cl && cv.tool === "pen" ? "3px solid white" : "2px solid #334155", borderRadius: "50%", cursor: "pointer" }} />
               ))}
             </div>
           )}
-          {cv.tool !== "select" && (
+          {cv.tool !== "select" && cv.tool !== "pan" && (
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <span style={{ fontSize: "12px", color: "#64748b" }}>Tam:</span>
               <input type="range" min="2" max="30" value={cv.brush} onChange={e => cv.setBrush(+e.target.value)} style={{ width: "56px" }} />
@@ -283,7 +219,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
             </div>
           )}
           {cv.tool === "select" && cv.images.length === 0 && <span style={{ fontSize: "12px", color: "#475569", fontStyle: "italic" }}>Adicione uma imagem para selecionar</span>}
-          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção ativa — arraste para mover</span>}
+          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção ativa — arraste os tokens na lona</span>}
 
           {cv.selImg.length > 0 && (
             <div style={{ display: "flex", gap: "8px", borderLeft: "2px solid #334155", paddingLeft: "8px", marginLeft: "4px" }}>
@@ -300,30 +236,14 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         </div>
       )}
       {!isMestre && (
-        <div style={{ background: "#1e293b", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #334155" }}>
-          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🗺️ Lona do Mestre — Sincronização Supabase Realtime</span>
+        <div style={{ background: "#1e293b", padding: "8px 12px", display: "flex", gap: "10px", alignItems: "center", borderBottom: "1px solid #334155" }}>
+          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🖐️ Arraste com o clique e use o Scroll do mouse para dar Zoom na mesa</span>
           <div style={{ marginLeft: "auto", width: "8px", height: "8px", background: "#22c55e", borderRadius: "50%" }} />
         </div>
       )}
-      <div ref={cv.contRef} style={{ flex: 1, overflow: "hidden", background: "#111827", position: "relative", touchAction: "none" }} onMouseDown={cv.onDown} onMouseMove={cv.onMove} onMouseUp={cv.onUp} onMouseLeave={cv.onUp} onTouchStart={cv.onDown} onTouchMove={cv.onMove} onTouchEnd={cv.onUp}>
-        {isMestre && (
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }}>
-            {cv.images.filter(i => i.layer === "map").map(img => (
-              <ImageObject key={img.id} img={img} selected={cv.selImg.includes(img.id)} canSelect={cv.tool === "select"} onSelect={() => { if (!cv.selImg.includes(img.id)) cv.setSelImg([img.id]); }} onUpdate={upd => cv.setImages(p => p.map(i => i.id === img.id ? upd : i))} onDelete={() => {}} onToggleLayer={() => {}} onMoveGroup={(dx, dy) => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } }} />
-            ))}
-          </div>
-        )}
-        <canvas ref={cv.canvasRef} style={{ width: "100%", height: "100%", display: "block", position: "relative", zIndex: 2, cursor: isMestre ? (cv.tool === "select" ? "default" : cv.tool === "eraser" ? "cell" : "crosshair") : "default", pointerEvents: isMestre && cv.tool === "select" ? "none" : "auto" }} />
-        {isMestre && (
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 3 }}>
-            {cv.images.filter(i => (i.layer || "token") !== "map").map(img => (
-              <ImageObject key={img.id} img={img} selected={cv.selImg.includes(img.id)} canSelect={cv.tool === "select"} onSelect={() => { if (!cv.selImg.includes(img.id)) cv.setSelImg([img.id]); }} onUpdate={upd => cv.setImages(p => p.map(i => i.id === img.id ? upd : i))} onDelete={() => {}} onToggleLayer={() => {}} onMoveGroup={(dx, dy) => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } }} />
-            ))}
-          </div>
-        )}
-        {isMestre && cv.tool === "select" && cv.selBox && (
-          <div style={{ position: "absolute", left: cv.selBox.x, top: cv.selBox.y, width: cv.selBox.w, height: cv.selBox.h, backgroundColor: "rgba(59, 130, 246, 0.2)", border: "1px solid #3b82f6", pointerEvents: "none", zIndex: 10 }} />
-        )}
+      
+      <div ref={cv.contRef} style={{ flex: 1, overflow: "hidden", background: "#0b0f19", position: "relative", touchAction: "none" }} onMouseDown={cv.onDown} onMouseMove={cv.onMove} onMouseUp={cv.onUp} onMouseLeave={cv.onUp} onTouchStart={cv.onDown} onTouchMove={cv.onMove} onTouchEnd={cv.onUp}>
+        <canvas ref={cv.canvasRef} style={{ width: "100%", height: "100%", display: "block", cursor: cv.tool === "pan" ? "grab" : (cv.tool === "select" ? "default" : "crosshair") }} />
       </div>
     </div>
   );
@@ -506,7 +426,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
           <div style={{ maxWidth: "460px", margin: "0 auto" }}>
             <h2 style={{ color: "#f59e0b", fontFamily: "Georgia", margin: "0 0 14px" }}>👥 {lobby.name}</h2>
             
-            {/* 🔮 NOVO PAINEL: Transmutação de Papéis dentro da própria mesa */}
             <div style={{ background: "#1e293b", borderRadius: "12px", padding: "14px", marginBottom: "14px", display: "grid", gap: "10px", border: "1px solid #334155" }}>
               <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>⚡ TRANSMUTAR SEU PAPEL ATUAL</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
