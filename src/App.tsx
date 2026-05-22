@@ -61,7 +61,6 @@ export default function App() {
       if (error) throw error;
 
       if (loaded) {
-        // Converte o formato do banco de dados (snake_case) de volta para o TypeScript (camelCase) se necessário
         const adaptados = loaded.map(c => ({
           id: c.id,
           owner: c.owner,
@@ -70,9 +69,9 @@ export default function App() {
           raca: c.raca,
           nivel: c.nivel,
           hp: c.hp,
-          hpMax: c.hp_max, // ✨ Adaptação das colunas do Postgres
+          hpMax: c.hp_max, 
           vigor: c.vigor,
-          vigorMax: c.vigor_max, // ✨ Adaptação das colunas do Postgres
+          vigorMax: c.vigor_max, 
           bonuses: c.bonuses,
           skills: c.skills,
           notes: c.notes
@@ -91,11 +90,9 @@ export default function App() {
     if (!user) return;
     const ch = { ...c, owner: user.username };
     
-    // Atualiza o estado local para o feedback visual ser instantâneo
     setChars(p => p.find(x => x.id === ch.id) ? p.map(x => x.id === ch.id ? ch : x) : [...p, ch]);
 
     try {
-      // Prepara os dados no formato snake_case exigido pelas colunas do PostgreSQL
       const payload = {
         id: ch.id,
         owner: ch.owner,
@@ -112,7 +109,6 @@ export default function App() {
         notes: ch.notes
       };
 
-      // O comando "upsert" insere se não existir, ou atualiza se o "id" já estiver no banco
       const { error } = await supabase
         .from("characters")
         .upsert(payload);
@@ -155,45 +151,38 @@ export default function App() {
   if (creatingChar) return (
     <div style={{ background: "#0f172a", minHeight: "100vh", padding: "20px", fontFamily: "'Segoe UI',sans-serif" }}>
       <button onClick={() => setCreatingChar(false)} style={{ background: "transparent", color: "#64748b", border: "none", cursor: "pointer", marginBottom: "16px", fontSize: "14px" }}>← Voltar</button>
-      <CharEditor char={null} owner={user?.username || ""} onSave={async c => { await saveChar(c); setCreatingChar(false); }} onCancel={() => setCreatingChar(false)} />
+      <CharEditor char={null} owner={user?.username || ""} onSave={async c => { await saveChar(c); setCreatingChar(false); }} onCancel={() => { setCreatingChar(false); }} />
     </div>
   );
 
   if (screen === "login") return <LoginScreen onLogin={async u => { setUser(u); await loadChars(u.username); setScreen("lobbies"); }} />;
   if (screen === "lobbies" && user) return <LobbyBrowser user={user} chars={chars} onEnterLobby={l => { setLobby(l); setScreen("role"); }} onLogout={logout} onSaveChar={saveChar} onDeleteChar={deleteChar} />;
   if (screen === "role" && user && lobby) return <RoleSelect user={user} lobby={lobby} chars={chars} onJoin={m => { setMember(m); setScreen("game"); }} onCreateChar={() => setCreatingChar(true)} onBack={() => setScreen("lobbies")} />;
-  // Substitua o bloco final do src/App.tsx por este:
   if (screen === "game" && user && lobby && member) return (
-  <GameScreen 
-    user={user} 
-    lobby={lobby} 
-    member={member} 
-    chars={chars} 
-    onLeave={async () => {
-      try {
-        // 🔮 MAGIA NOVA: Exclui a presença do jogador direto na tabela online do Supabase
-        await supabase
-          .from("members")
-          .delete()
-          .eq("lobby_id", lobby.id)
-          .eq("username", user.username);
-
-        // Limpa os resquícios locais antigos por garantia de escopo
-        // @ts-ignore
-        await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true); 
-        // @ts-ignore
-        await window.storage.delete("rpg_cur"); 
-      } catch (err) {
-        console.error("Erro ao limpar presença no Supabase:", err);
-      }
-      
-      // Retorna para o salão de lobbies
-      setMember(null); 
-      setScreen("lobbies"); 
-    }} 
-    onSaveChar={saveChar} 
-    onDeleteChar={deleteChar} 
-  />
+    <GameScreen 
+      user={user} 
+      lobby={lobby} 
+      member={member} 
+      chars={chars} 
+      onLeave={async () => { 
+        try {
+          await supabase
+            .from("members")
+            .delete()
+            .eq("lobby_id", lobby.id)
+            .eq("username", user.username);
+          // @ts-ignore
+          await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true); 
+          // @ts-ignore
+          await window.storage.delete("rpg_cur"); 
+        } catch {} 
+        setMember(null); 
+        setScreen("lobbies"); 
+      }} 
+      onSaveChar={saveChar} 
+      onDeleteChar={deleteChar}
+      onUpdateMember={setMember} // 🔮 Escuta reativa de transmutação de papéis
+    />
   );
   
   return null;

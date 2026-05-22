@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import type { User, Lobby, Character, Member, ImageObj } from "../types";
 import { useCanvas } from "../hooks/useCanvas";
-import { supabase } from "../lib/supabase"; // 👈 Canalizando escuta de presença
+import { supabase } from "../lib/supabase"; 
 import CharEditor from "./CharEditor";
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
@@ -19,6 +19,17 @@ const TI: Record<string, string> = { passiva: "🛡️", ativa: "⚡", ataque: "
 
 const bc = (v: number) => (v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#475569");
 
+const I = {
+  background: "#111827",
+  border: "1px solid #374151",
+  borderRadius: "8px",
+  padding: "8px 10px",
+  color: "#e5e7eb",
+  fontSize: "14px",
+  width: "100%",
+  boxSizing: "border-box" as const,
+};
+
 /* ── ImageObject ─────────────────────────────────────── */
 interface ImageObjectProps {
   img: ImageObj; selected: boolean; canSelect: boolean;
@@ -27,7 +38,7 @@ interface ImageObjectProps {
 }
 
 function ImageObject({ img, selected, canSelect, onSelect, onUpdate, onDelete, onToggleLayer, onMoveGroup }: ImageObjectProps) {
-  void onDelete; void onToggleLayer; // Mantém conformidade de escopo TS
+  void onDelete; void onToggleLayer; 
   const HANDLES = [
     { id: "tl", cx: 0, cy: 0, cur: "nw-resize" }, { id: "tc", cx: .5, cy: 0, cur: "n-resize" },
     { id: "tr", cx: 1, cy: 0, cur: "ne-resize" }, { id: "ml", cx: 0, cy: .5, cur: "w-resize" },
@@ -112,9 +123,10 @@ function SkillPanel({ char }: { char: Character | null }) {
 interface GameScreenProps {
   user: User; lobby: Lobby; member: Member; chars: Character[];
   onLeave: () => void; onSaveChar: (c: Character) => Promise<void> | void; onDeleteChar: (id: string) => Promise<void> | void;
+  onUpdateMember: (m: Member) => void; // 🔮 Prop para disparar atualização reativa no pai
 }
 
-export default function GameScreen({ user, lobby, member, chars, onLeave, onSaveChar, onDeleteChar }: GameScreenProps) {
+export default function GameScreen({ user, lobby, member, chars, onLeave, onSaveChar, onDeleteChar, onUpdateMember }: GameScreenProps) {
   const isMestre = member.role === "mestre"; const isEsp = member.role === "espectador";
   const activeChar = member.charId ? chars.find(c => c.id === member.charId) : null;
 
@@ -131,10 +143,8 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   const [atk, setAtk] = useState("none"); const [rolling, setRolling] = useState(false);
   const [dispN, setDispN] = useState<number | null>(null); const [lastR, setLastR] = useState<any>(null); const [hist, setHist] = useState<any[]>([]);
 
-  // 🪄 INVOCAÇÃO DO MOTOR GRÁFICO CONECTADO À NUVEM 🪄
   const cv = useCanvas(lobby.id, isMestre, tab);
 
-  // 🔮 HEARTBEAT PING: Envia sinal de presença online para o Supabase a cada 20s
   useEffect(() => {
     const pingOnline = async () => {
       try {
@@ -152,7 +162,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
     pingOnline(); const iv = setInterval(pingOnline, 20000); return () => clearInterval(iv);
   }, [lobby.id, member, user.username]);
 
-  // 🔮 REALTIME MEMBERS: Escuta ativa de quem entra e sai da mesa em tempo real
   const fetchActiveMembers = async () => {
     try {
       const { data } = await supabase
@@ -161,7 +170,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         .eq("lobby_id", lobby.id);
       
       if (data) {
-        // Filtra jogadores que sumiram há mais de 1 minuto (offline)
         const active = data
           .filter((m: any) => Date.now() - m.ts < 40000)
           .map((m: any) => ({
@@ -190,6 +198,48 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
     return () => { supabase.removeChannel(canalPresenca); };
   }, [lobby.id]);
+
+  // 🔮 Transmutação dinâmica de papéis e fichas ativa
+  const handleSwitchRoleInsideGame = async (newRole: "mestre" | "jogador" | "espectador", chosenCharId: string | null) => {
+    try {
+      const timestamp = Date.now();
+      const updatedMemberData = {
+        lobby_id: lobby.id,
+        username: user.username,
+        role: newRole,
+        char_id: newRole === "jogador" ? chosenCharId : null,
+        ts: timestamp
+      };
+
+      const { error } = await supabase
+        .from("members")
+        .upsert(updatedMemberData);
+
+      if (error) throw error;
+
+      const localMemberObj: Member = {
+        lobbyId: lobby.id,
+        username: user.username,
+        role: newRole,
+        charId: newRole === "jogador" ? chosenCharId : null,
+        ts: timestamp
+      };
+
+      // @ts-ignore
+      await window.storage.set("rpg_cur", JSON.stringify(localMemberObj));
+      onUpdateMember(localMemberObj);
+
+      const allowed = newRole === "mestre" 
+        ? ["dados", "mestre", "sessao"]
+        : newRole === "espectador" ? ["tela", "sessao"] : ["dados", "personagens", "tela", "sessao"];
+      
+      if (!allowed.includes(tab)) {
+        setTab(allowed[0]);
+      }
+    } catch {
+      alert("⚠️ Erro ao transmutar papel no servidor.");
+    }
+  };
 
   const doRoll = () => {
     if (rolling) return; setRolling(true); let i = 0;
@@ -284,6 +334,8 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       <CharEditor char={editChar} owner={user.username} onSave={saveChar} onCancel={() => { setShowCE(false); setEditChar(null); }} />
     </div>
   );
+
+  const isAnotherMasterActive = members.some(m => m.role === "mestre" && m.username !== user.username);
 
   return (
     <div style={{ background: "#0f172a", minHeight: "100vh", color: "#e2e8f0", fontFamily: "'Segoe UI',sans-serif", display: "flex", flexDirection: "column" }}>
@@ -453,6 +505,37 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         {tab === "sessao" && (
           <div style={{ maxWidth: "460px", margin: "0 auto" }}>
             <h2 style={{ color: "#f59e0b", fontFamily: "Georgia", margin: "0 0 14px" }}>👥 {lobby.name}</h2>
+            
+            {/* 🔮 NOVO PAINEL: Transmutação de Papéis dentro da própria mesa */}
+            <div style={{ background: "#1e293b", borderRadius: "12px", padding: "14px", marginBottom: "14px", display: "grid", gap: "10px", border: "1px solid #334155" }}>
+              <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>⚡ TRANSMUTAR SEU PAPEL ATUAL</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+                <button onClick={() => handleSwitchRoleInsideGame("mestre", null)} disabled={isAnotherMasterActive} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "mestre" ? "#f59e0b" : "#111827", color: member.role === "mestre" ? "#111" : isAnotherMasterActive ? "#374151" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: isAnotherMasterActive ? "not-allowed" : "pointer", opacity: isAnotherMasterActive ? 0.4 : 1 }} title={isAnotherMasterActive ? "Bloqueado: Já existe um Mestre comandando a mesa" : "Assumir a coroa do Mestre"}>👑 Mestre</button>
+                <button onClick={() => handleSwitchRoleInsideGame("espectador", null)} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "espectador" ? "#a855f7" : "#111827", color: member.role === "espectador" ? "#fff" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>👁️ Assistir</button>
+                <button onClick={() => {
+                  if (chars.length > 0) handleSwitchRoleInsideGame("jogador", member.charId || chars[0].id);
+                  else alert("Forje um herói na Armaria do menu inicial primeiro!");
+                }} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "jogador" ? "#3b82f6" : "#111827", color: member.role === "jogador" ? "#fff" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>⚔️ Jogador</button>
+              </div>
+
+              {isAnotherMasterActive && (
+                <div style={{ color: "#f87171", fontSize: "11px", fontStyle: "italic", textAlign: "center" }}>
+                  ⚠️ O Trono do Mestre já está ocupado por outro narrador ativo.
+                </div>
+              )}
+
+              {member.role === "jogador" && chars.length > 1 && (
+                <div style={{ display: "grid", gap: "4px", marginTop: "4px", borderTop: "1px solid #334155", paddingTop: "8px" }}>
+                  <label style={{ color: "#9ca3af", fontSize: "10px", fontWeight: "bold" }}>MUDAR DE HERÓI ATIVO NESTA MESA:</label>
+                  <select style={{ ...I, padding: "6px", fontSize: "12px" }} value={member.charId || ""} onChange={(e) => handleSwitchRoleInsideGame("jogador", e.target.value)}>
+                    {chars.map(c => (
+                      <option key={c.id} value={c.id} style={{ background: "#111827" }}>{c.name} (Nv. {c.nivel} - {c.classe})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
             <div style={{ background: "#1e293b", borderRadius: "12px", padding: "14px", marginBottom: "14px" }}>
               <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold", marginBottom: "10px" }}>PARTICIPANTES ONLINE ({members.length})</div>
               {members.length === 0 && <div style={{ color: "#374151", fontSize: "13px", textAlign: "center", padding: "16px" }}>Ninguém mais na sessão.</div>}

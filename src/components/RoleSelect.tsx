@@ -1,7 +1,7 @@
 // src/components/RoleSelect.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { User, Lobby, Character, Member } from "../types";
-import { supabase } from "../lib/supabase"; // 👈 Canalizando a ponte do Supabase
+import { supabase } from "../lib/supabase"; 
 
 const I = {
   background: "#111827",
@@ -21,13 +21,43 @@ interface RoleSelectProps {
 
 export default function RoleSelect({ user, lobby, chars, onJoin, onCreateChar, onBack }: RoleSelectProps) {
   const isLobbyOwner = lobby.ownerId === user.username;
-  const [role, setRole] = useState<"mestre" | "jogador" | "espectador">(isLobbyOwner ? "mestre" : "jogador");
+  const [role, setRole] = useState<"mestre" | "jogador" | "espectador" | any>("jogador");
   const [selCharId, setSelCharId] = useState(chars[0]?.id || "");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [masterActive, setMasterActive] = useState(false); // 🔮 Sentinela de Mestre Online
+
+  // 🔮 Monitora se já existe mestre ativo no plano online antes de deixar entrar
+  useEffect(() => {
+    const checkActiveMaster = async () => {
+      try {
+        const { data } = await supabase
+          .from("members")
+          .select("*")
+          .eq("lobby_id", lobby.id)
+          .eq("role", "mestre");
+
+        if (data && data.length > 0) {
+          // Filtra se o mestre deu sinal de vida nos últimos 40s e não sou eu mesmo
+          const active = data.some((m: any) => (Date.now() - m.ts < 40000) && m.username !== user.username);
+          setMasterActive(active);
+          setRole(active ? "jogador" : (isLobbyOwner ? "mestre" : "jogador"));
+        } else {
+          setRole(isLobbyOwner ? "mestre" : "jogador");
+        }
+      } catch {
+        setRole(isLobbyOwner ? "mestre" : "jogador");
+      }
+    };
+    checkActiveMaster();
+  }, [lobby.id, isLobbyOwner, user.username]);
 
   const handleConfirm = async () => {
     setErr("");
+    if (role === "mestre" && masterActive) {
+      setErr("O Trono do Mestre já está ocupado nesta sessão.");
+      return;
+    }
     if (role === "jogador" && !selCharId) {
       setErr("Você precisa selecionar ou forjar um personagem para jogar.");
       return;
@@ -45,14 +75,12 @@ export default function RoleSelect({ user, lobby, chars, onJoin, onCreateChar, o
         ts: timestamp
       };
 
-      // 🔮 Registra a presença do jogador diretamente na tabela online 'members' (Upsert)
       const { error } = await supabase
         .from("members")
         .upsert(memberData);
 
       if (error) throw error;
 
-      // Monta o objeto de membro compatível com o estado local do App.tsx
       const localMember: Member = {
         lobbyId: lobby.id,
         username: user.username,
@@ -61,7 +89,7 @@ export default function RoleSelect({ user, lobby, chars, onJoin, onCreateChar, o
         ts: timestamp
       };
       
-      // @ts-ignore - Salva o token de sessão local para reconexões automáticas rápidas
+      // @ts-ignore
       await window.storage.set("rpg_cur", JSON.stringify(localMember));
 
       onJoin(localMember);
@@ -86,7 +114,7 @@ export default function RoleSelect({ user, lobby, chars, onJoin, onCreateChar, o
         <div>
           <label style={{ color: "#9ca3af", fontSize: "11px", fontWeight: "bold", display: "block", marginBottom: "6px" }}>PAPEL NA MESA</label>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-            <button onClick={() => setRole("mestre")} style={{ padding: "10px 4px", borderRadius: "8px", border: "none", background: role === "mestre" ? "#f59e0b" : "#111827", color: role === "mestre" ? "#111" : "#64748b", fontWeight: "bold", cursor: "pointer", fontSize: "12px", transition: "all .15s" }}>
+            <button onClick={() => !masterActive && setRole("mestre")} disabled={masterActive} style={{ padding: "10px 4px", borderRadius: "8px", border: "none", background: role === "mestre" ? "#f59e0b" : "#111827", color: role === "mestre" ? "#111" : masterActive ? "#374151" : "#64748b", fontWeight: "bold", cursor: masterActive ? "not-allowed" : "pointer", fontSize: "12px", transition: "all .15s", opacity: masterActive ? 0.4 : 1 }}>
               👑 Mestre
             </button>
             <button onClick={() => setRole("jogador")} style={{ padding: "10px 4px", borderRadius: "8px", border: "none", background: role === "jogador" ? "#3b82f6" : "#111827", color: role === "jogador" ? "#fff" : "#64748b", fontWeight: "bold", cursor: "pointer", fontSize: "12px", transition: "all .15s" }}>
@@ -96,9 +124,13 @@ export default function RoleSelect({ user, lobby, chars, onJoin, onCreateChar, o
               👁️ Assistir
             </button>
           </div>
+          {masterActive && (
+            <div style={{ color: "#ef4444", fontSize: "11px", marginTop: "6px", fontStyle: "italic" }}>
+              *Já existe um Mestre comandando esta mesa atualmente.
+            </div>
+          )}
         </div>
 
-        {/* Alerta de intruso caso tente mestrar em um lobby alheio */}
         {role === "mestre" && !isLobbyOwner && (
           <div style={{ background: "#422006", border: "1px solid #f59e0b", borderRadius: "8px", padding: "10px", fontSize: "12px", color: "#f59e0b", lineHeight: "1.5" }}>
             ⚠️ <strong>Nota de Copiloto:</strong> Você não é o criador original desta sala (`{lobby.ownerId}`). Certifique-se de que possui autorização do dono da mesa para assumir a coroa de Mestre nesta sessão.
