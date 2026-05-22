@@ -40,6 +40,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const imagesRef = useRef<ImageObj[]>([]);
   const selImgRef = useRef<string[]>([]);
   const toolRef = useRef("pen");
+  const selBoxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null); // 🔮 Nova referência para a caixa
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { panXRef.current = panX; }, [panX]);
@@ -48,6 +49,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   useEffect(() => { imagesRef.current = images; }, [images]);
   useEffect(() => { selImgRef.current = selImg; }, [selImg]);
   useEffect(() => { toolRef.current = tool; }, [tool]);
+  useEffect(() => { selBoxRef.current = selBox; }, [selBox]); // 🔮 Sincroniza a caixa de seleção para não ficar obsoleta!
 
   const lastP = useRef<{ x: number; y: number } | null>(null);
   const startPan = useRef<{ x: number; y: number } | null>(null);
@@ -89,14 +91,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     const fgCtx = fg.getContext("2d");
     if (!bgCtx || !drawCtx || !fgCtx) return;
 
-    // Limpa as 3 lonas
     bgCtx.clearRect(0, 0, bg.width, bg.height);
     drawCtx.clearRect(0, 0, draw.width, draw.height);
     fgCtx.clearRect(0, 0, fg.width, fg.height);
 
     bgCtx.save(); drawCtx.save(); fgCtx.save();
     
-    // Aplica a câmera matemática a todas as camadas ao mesmo tempo!
     bgCtx.translate(panXRef.current, panYRef.current);
     bgCtx.scale(zoomRef.current, zoomRef.current);
     drawCtx.translate(panXRef.current, panYRef.current);
@@ -104,9 +104,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     fgCtx.translate(panXRef.current, panYRef.current);
     fgCtx.scale(zoomRef.current, zoomRef.current);
 
-    // ----------------------------------------------------------------
-    // 1. CAMADA DE FUNDO (MAPAS E MESA ESCURA)
-    // ----------------------------------------------------------------
+    // 1. CAMADA DE FUNDO (MAPAS DO MUNDO VIRTUAL)
     bgCtx.fillStyle = "#111827";
     bgCtx.fillRect(0, 0, MUNDO_W, MUNDO_H);
 
@@ -120,9 +118,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       }
     });
 
-    // ----------------------------------------------------------------
-    // 2. CAMADA DO MEIO (VETORES DE CANETA E BORRACHA NATIVA)
-    // ----------------------------------------------------------------
+    // 2. CAMADA DO MEIO (VETORES DE CANETA/BORRACHA)
     drawCtx.lineCap = "round";
     drawCtx.lineJoin = "round";
     
@@ -135,7 +131,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       }
 
       if (linha.tool === "eraser") {
-        // Agora funciona perfeito! Fura só a camada "drawCtx" sem tocar no "bgCtx"
         drawCtx.globalCompositeOperation = "destination-out";
         drawCtx.strokeStyle = "rgba(0,0,0,1)";
         drawCtx.lineWidth = linha.brush * 5;
@@ -147,9 +142,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       drawCtx.stroke();
     });
 
-    // ----------------------------------------------------------------
-    // 3. CAMADA DA FRENTE (TOKENS E INTERFACE DO MESTRE)
-    // ----------------------------------------------------------------
+    // 3. CAMADA DA FRENTE (TOKENS DE PERSONAGENS E MONSTROS)
     imagesRef.current.filter(img => img.layer !== "map").forEach(img => {
       const el = new Image();
       el.src = img.dataUrl;
@@ -158,32 +151,68 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       } else {
         el.onload = () => renderizarTelaCompleta();
       }
-
-      if (isMestre && selImgRef.current.includes(img.id) && toolRef.current === "select") {
-        fgCtx.strokeStyle = img.layer === "map" ? "#f59e0b" : "#3b82f6";
-        fgCtx.lineWidth = 3 / zoomRef.current;
-        fgCtx.strokeRect(img.x, img.y, img.w, img.h);
-      }
     });
 
+    // 🔮 4. NOVA CORREÇÃO: CENTRALIZADOR DE BORDAS E BADGES DE SELEÇÃO DE CAMADA
+    if (isMestre && toolRef.current === "select") {
+      imagesRef.current.forEach(img => {
+        if (selImgRef.current.includes(img.id)) {
+          const isMap = img.layer === "map";
+          const corCamada = isMap ? "#f59e0b" : "#3b82f6"; // Laranja para Fundo, Azul para Frente
+          const textoLabel = isMap ? "🗺️ Fundo" : "♟️ Frente";
+
+          // Desenha o contorno retangular sobre a lona da frente para ficar visível acima de tudo
+          fgCtx.strokeStyle = corCamada;
+          fgCtx.lineWidth = 3 / zoomRef.current;
+          fgCtx.strokeRect(img.x, img.y, img.w, img.h);
+
+          // Renderização responsiva do Badge de Texto
+          fgCtx.save();
+          fgCtx.fillStyle = corCamada;
+          
+          // Ajusta a escala da fonte para manter o tamanho visual nítido no monitor independente do Zoom
+          const fontSize = 11 / zoomRef.current;
+          fgCtx.font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
+          
+          const txtWidth = fgCtx.measureText(textoLabel).width;
+          const badgeH = 18 / zoomRef.current;
+          const badgeW = txtWidth + (12 / zoomRef.current);
+          const badgeX = img.x;
+          const badgeY = img.y - badgeH - (3 / zoomRef.current);
+
+          // Desenha a aba preenchida
+          fgCtx.fillRect(badgeX, badgeY, badgeW, badgeH);
+
+          // Carimba o indicador em letras brancas
+          fgCtx.fillStyle = "#ffffff";
+          fgCtx.textBaseline = "middle";
+          fgCtx.fillText(textoLabel, badgeX + (6 / zoomRef.current), badgeY + (badgeH / 2));
+          fgCtx.restore();
+        }
+      });
+    }
+
+    // Moldura delimitadora do tabuleiro virtual
     fgCtx.strokeStyle = "#1f2937";
     fgCtx.lineWidth = 4 / zoomRef.current;
     fgCtx.strokeRect(0, 0, MUNDO_W, MUNDO_H);
 
-    if (isMestre && toolRef.current === "select" && selBox) {
+    // Retângulo dinâmico de seleção múltipla (Caixa azul de arrasto)
+    if (isMestre && toolRef.current === "select" && selBoxRef.current) {
       fgCtx.strokeStyle = "rgba(59, 130, 246, 0.8)";
       fgCtx.lineWidth = 1.5 / zoomRef.current;
       fgCtx.fillStyle = "rgba(59, 130, 246, 0.15)";
-      fgCtx.fillRect(selBox.x, selBox.y, selBox.w, selBox.h);
-      fgCtx.strokeRect(selBox.x, selBox.y, selBox.w, selBox.h);
+      fgCtx.fillRect(selBoxRef.current.x, selBoxRef.current.y, selBoxRef.current.w, selBoxRef.current.h);
+      fgCtx.strokeRect(selBoxRef.current.x, selBoxRef.current.y, selBoxRef.current.w, selBoxRef.current.h);
     }
 
     bgCtx.restore(); drawCtx.restore(); fgCtx.restore();
   }, [isMestre]);
 
+  // 🔮 Adicionado o 'selBox' na lista de dependências para forçar o redesenho durante o arrasto do mouse
   useEffect(() => {
     renderizarTelaCompleta();
-  }, [linhas, images, zoom, panX, panY, renderizarTelaCompleta]);
+  }, [linhas, images, zoom, panX, panY, selBox, renderizarTelaCompleta]);
 
   useEffect(() => {
     if (isMestre || tab !== "tela") return;
@@ -249,7 +278,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   }, [tab]);
 
   const obterPosicaoMundo = (e: any) => {
-    const cv = bgRef.current; // Usando a camada de fundo como referência dimensional
+    const cv = bgRef.current; 
     if (!cv) return { x: 0, y: 0, screenX: 0, screenY: 0 };
     const rect = cv.getBoundingClientRect();
     const src = e.touches ? e.touches[0] : e;
