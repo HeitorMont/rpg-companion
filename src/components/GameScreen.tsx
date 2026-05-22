@@ -241,8 +241,24 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         </div>
       )}
       
-      <div ref={cv.contRef} style={{ flex: 1, overflow: "hidden", background: "#0b0f19", position: "relative", touchAction: "none" }} onMouseDown={cv.onDown} onMouseMove={cv.onMove} onMouseUp={cv.onUp} onMouseLeave={cv.onUp} onTouchStart={cv.onDown} onTouchMove={cv.onMove} onTouchEnd={cv.onUp}>
-        <canvas ref={cv.canvasRef} style={{ width: "100%", height: "100%", display: "block", cursor: cv.tool === "pan" ? "grab" : (cv.tool === "select" ? "default" : "crosshair") }} />
+      {/* 🔮 A LONA TRIPLA UNIFICADA DA MESA DE JOGO */}
+      <div 
+        ref={cv.contRef} 
+        style={{ 
+          flex: 1, overflow: "hidden", background: "#0b0f19", position: "relative", touchAction: "none", 
+          cursor: cv.tool === "pan" ? "grab" : (cv.tool === "select" ? "default" : "crosshair") 
+        }} 
+        onMouseDown={cv.onDown} onMouseMove={cv.onMove} onMouseUp={cv.onUp} onMouseLeave={cv.onUp} 
+        onTouchStart={cv.onDown} onTouchMove={cv.onMove} onTouchEnd={cv.onUp}
+      >
+        {/* Camada 1: Mapas de Fundo */}
+        <canvas ref={cv.bgRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+        
+        {/* Camada 2: Desenhos e Borracha */}
+        <canvas ref={cv.drawRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+        
+        {/* Camada 3: Tokens Livres */}
+        <canvas ref={cv.fgRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
       </div>
     </div>
   );
