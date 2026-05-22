@@ -163,7 +163,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       if (data) {
         // Filtra jogadores que sumiram há mais de 1 minuto (offline)
         const active = data
-          .filter((m: any) => Date.now() - m.ts < 60000)
+          .filter((m: any) => Date.now() - m.ts < 40000)
           .map((m: any) => ({
             lobbyId: m.lobby_id,
             username: m.username,

@@ -162,8 +162,39 @@ export default function App() {
   if (screen === "login") return <LoginScreen onLogin={async u => { setUser(u); await loadChars(u.username); setScreen("lobbies"); }} />;
   if (screen === "lobbies" && user) return <LobbyBrowser user={user} chars={chars} onEnterLobby={l => { setLobby(l); setScreen("role"); }} onLogout={logout} onSaveChar={saveChar} onDeleteChar={deleteChar} />;
   if (screen === "role" && user && lobby) return <RoleSelect user={user} lobby={lobby} chars={chars} onJoin={m => { setMember(m); setScreen("game"); }} onCreateChar={() => setCreatingChar(true)} onBack={() => setScreen("lobbies")} />;
-  if (screen === "game" && user && lobby && member) return <GameScreen user={user} lobby={lobby} member={member} chars={chars} onLeave={async () => { // @ts-ignore
-    try { await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true); await window.storage.delete("rpg_cur"); } catch {} setMember(null); setScreen("lobbies"); }} onSaveChar={saveChar} onDeleteChar={deleteChar} />;
+  // Substitua o bloco final do src/App.tsx por este:
+  if (screen === "game" && user && lobby && member) return (
+  <GameScreen 
+    user={user} 
+    lobby={lobby} 
+    member={member} 
+    chars={chars} 
+    onLeave={async () => {
+      try {
+        // 🔮 MAGIA NOVA: Exclui a presença do jogador direto na tabela online do Supabase
+        await supabase
+          .from("members")
+          .delete()
+          .eq("lobby_id", lobby.id)
+          .eq("username", user.username);
+
+        // Limpa os resquícios locais antigos por garantia de escopo
+        // @ts-ignore
+        await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true); 
+        // @ts-ignore
+        await window.storage.delete("rpg_cur"); 
+      } catch (err) {
+        console.error("Erro ao limpar presença no Supabase:", err);
+      }
+      
+      // Retorna para o salão de lobbies
+      setMember(null); 
+      setScreen("lobbies"); 
+    }} 
+    onSaveChar={saveChar} 
+    onDeleteChar={deleteChar} 
+  />
+  );
   
   return null;
 }
