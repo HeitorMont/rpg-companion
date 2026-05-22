@@ -19,23 +19,19 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        // @ts-ignore
         const s = await window.storage.get("rpg_sess");
         if (s) {
           const { username, pwHash } = JSON.parse(s.value);
           try {
-            // @ts-ignore
             const ur = await window.storage.get(`rpg_user:${username.toLowerCase()}`, true);
             if (ur) {
               const u = JSON.parse(ur.value);
               if (u.pwHash === pwHash) {
                 setUser(u); await loadChars(u.username);
                 try {
-                  // @ts-ignore
                   const cr = await window.storage.get("rpg_cur");
                   if (cr) { 
                     const cs = JSON.parse(cr.value); 
-                    // @ts-ignore
                     const lr = await window.storage.get(`rpg_lob:${cs.lobbyId}`, true); 
                     if (lr) { setLobby(JSON.parse(lr.value)); setMember(cs); setScreen("game"); return; } 
                   }
@@ -137,10 +133,8 @@ export default function App() {
   };
 
   const logout = async () => {
-    // @ts-ignore
     try { await window.storage.delete("rpg_sess"); } catch {}
-    if (member && lobby && user) { 
-      // @ts-ignore
+    if (member && lobby && user) {
       try { await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true); await window.storage.delete("rpg_cur"); } catch {} 
     }
     setUser(null); setLobby(null); setMember(null); setChars([]); setScreen("login");
@@ -171,9 +165,7 @@ export default function App() {
             .delete()
             .eq("lobby_id", lobby.id)
             .eq("username", user.username);
-          // @ts-ignore
-          await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true); 
-          // @ts-ignore
+          await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true);
           await window.storage.delete("rpg_cur"); 
         } catch {} 
         setMember(null); 

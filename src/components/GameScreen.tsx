@@ -161,7 +161,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         ts: timestamp
       };
 
-      // @ts-ignore
       await window.storage.set("rpg_cur", JSON.stringify(localMemberObj));
       onUpdateMember(localMemberObj);
 

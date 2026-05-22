@@ -89,7 +89,6 @@ export default function RoleSelect({ user, lobby, chars, onJoin, onCreateChar, o
         ts: timestamp
       };
       
-      // @ts-ignore
       await window.storage.set("rpg_cur", JSON.stringify(localMember));
 
       onJoin(localMember);
