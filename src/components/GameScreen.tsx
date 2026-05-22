@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import type { User, Lobby, Character, Member, ImageObj } from "../types";
 import { useCanvas } from "../hooks/useCanvas";
+import { supabase } from "../lib/supabase"; // 👈 Canalizando escuta de presença
 import CharEditor from "./CharEditor";
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
@@ -26,8 +27,7 @@ interface ImageObjectProps {
 }
 
 function ImageObject({ img, selected, canSelect, onSelect, onUpdate, onDelete, onToggleLayer, onMoveGroup }: ImageObjectProps) {
-  void onDelete; void onToggleLayer;
-  
+  void onDelete; void onToggleLayer; // Mantém conformidade de escopo TS
   const HANDLES = [
     { id: "tl", cx: 0, cy: 0, cur: "nw-resize" }, { id: "tc", cx: .5, cy: 0, cur: "n-resize" },
     { id: "tr", cx: 1, cy: 0, cur: "ne-resize" }, { id: "ml", cx: 0, cy: .5, cur: "w-resize" },
@@ -119,7 +119,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   const activeChar = member.charId ? chars.find(c => c.id === member.charId) : null;
 
   const TABS = isMestre
-    ? [["dados", "🎲"], ["personagens", "⚔️"], ["mestre", "🗺️"], ["sessao", "👥"]]
+    ? [["dados", "🎲"], ["mestre", "🗺️"], ["sessao", "👥"]]
     : isEsp ? [["tela", "🗺️"], ["sessao", "👥"]] : [["dados", "🎲"], ["personagens", "⚔️"], ["tela", "🗺️"], ["sessao", "👥"]];
   const TLABELS: Record<string, string> = { dados: "Dados", personagens: "Chars", mestre: "Mestre", sessao: "Sessão", habilidades: "Skills", tela: "Tela" };
 
@@ -131,29 +131,64 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   const [atk, setAtk] = useState("none"); const [rolling, setRolling] = useState(false);
   const [dispN, setDispN] = useState<number | null>(null); const [lastR, setLastR] = useState<any>(null); const [hist, setHist] = useState<any[]>([]);
 
-  // 🪄 INVOCAÇÃO DO NOSSO NOVO MOTOR GRÁFICO 🪄
+  // 🪄 INVOCAÇÃO DO MOTOR GRÁFICO CONECTADO À NUVEM 🪄
   const cv = useCanvas(lobby.id, isMestre, tab);
 
+  // 🔮 HEARTBEAT PING: Envia sinal de presença online para o Supabase a cada 20s
   useEffect(() => {
-    const ping = async () => { try { const u = { ...member, ts: Date.now() }; 
-    // @ts-ignore
-    await window.storage.set(`rpg_mem:${lobby.id}:${user.username}`, JSON.stringify(u), true); } catch {} };
-    ping(); const iv = setInterval(ping, 25000); return () => clearInterval(iv);
-  }, [lobby.id, member, user.username]);
-
-  useEffect(() => {
-    const load = async () => {
+    const pingOnline = async () => {
       try {
-        // @ts-ignore
-        const r = await window.storage.list(`rpg_mem:${lobby.id}:`, true);
-        if (r?.keys?.length) {
-          // @ts-ignore
-          const ms = (await Promise.all(r.keys.map(async (k: string) => { try { const d = await window.storage.get(k, true); return d ? JSON.parse(d.value) : null; } catch { return null; } }))).filter(Boolean).filter((m: Member) => Date.now() - m.ts < 90000);
-          setMembers(ms);
-        } else setMembers([]);
+        await supabase
+          .from("members")
+          .upsert({
+            lobby_id: lobby.id,
+            username: user.username,
+            role: member.role,
+            char_id: member.charId || null,
+            ts: Date.now()
+          });
       } catch {}
     };
-    load(); const iv = setInterval(load, 6000); return () => clearInterval(iv);
+    pingOnline(); const iv = setInterval(pingOnline, 20000); return () => clearInterval(iv);
+  }, [lobby.id, member, user.username]);
+
+  // 🔮 REALTIME MEMBERS: Escuta ativa de quem entra e sai da mesa em tempo real
+  const fetchActiveMembers = async () => {
+    try {
+      const { data } = await supabase
+        .from("members")
+        .select("*")
+        .eq("lobby_id", lobby.id);
+      
+      if (data) {
+        // Filtra jogadores que sumiram há mais de 1 minuto (offline)
+        const active = data
+          .filter((m: any) => Date.now() - m.ts < 60000)
+          .map((m: any) => ({
+            lobbyId: m.lobby_id,
+            username: m.username,
+            role: m.role,
+            charId: m.char_id,
+            ts: m.ts
+          }));
+        setMembers(active);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchActiveMembers();
+    
+    const canalPresenca = supabase
+      .channel(`lobby_members:${lobby.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "members", filter: `lobby_id=eq.${lobby.id}` },
+        () => { fetchActiveMembers(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(canalPresenca); };
   }, [lobby.id]);
 
   const doRoll = () => {
@@ -198,13 +233,13 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
             </div>
           )}
           {cv.tool === "select" && cv.images.length === 0 && <span style={{ fontSize: "12px", color: "#475569", fontStyle: "italic" }}>Adicione uma imagem para selecionar</span>}
-          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção ativa — arraste para mover, handles para redimensionar</span>}
+          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção ativa — arraste para mover</span>}
 
           {cv.selImg.length > 0 && (
             <div style={{ display: "flex", gap: "8px", borderLeft: "2px solid #334155", paddingLeft: "8px", marginLeft: "4px" }}>
-              <button onClick={() => cv.setImages(prev => prev.map(i => cv.selImg.includes(i.id) ? { ...i, layer: "token" } : i))} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }} title="Trazer para Frente (Tokens)">⬆️ Frente</button>
-              <button onClick={() => cv.setImages(prev => prev.map(i => cv.selImg.includes(i.id) ? { ...i, layer: "map" } : i))} style={{ background: "#f59e0b", color: "#111", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }} title="Enviar para o Fundo (Mapas)">⬇️ Fundo</button>
-              <button onClick={() => { cv.setImages(prev => prev.filter(i => !cv.selImg.includes(i.id))); cv.setSelImg([]); }} style={{ background: "#ef4444", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }} title="Deletar Seleção">🗑️ Excluir</button>
+              <button onClick={() => cv.setImages(prev => prev.map(i => cv.selImg.includes(i.id) ? { ...i, layer: "token" } : i))} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>⬆️ Frente</button>
+              <button onClick={() => cv.setImages(prev => prev.map(i => cv.selImg.includes(i.id) ? { ...i, layer: "map" } : i))} style={{ background: "#f59e0b", color: "#111", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>⬇️ Fundo</button>
+              <button onClick={() => { cv.setImages(prev => prev.filter(i => !cv.selImg.includes(i.id))); cv.setSelImg([]); }} style={{ background: "#ef4444", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>🗑️ Excluir</button>
             </div>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: "5px" }}>
@@ -216,7 +251,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       )}
       {!isMestre && (
         <div style={{ background: "#1e293b", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #334155" }}>
-          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🗺️ Tela do Mestre — somente leitura, atualiza a cada 4s</span>
+          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🗺️ Lona do Mestre — Sincronização Supabase Realtime</span>
           <div style={{ marginLeft: "auto", width: "8px", height: "8px", background: "#22c55e", borderRadius: "50%" }} />
         </div>
       )}
@@ -224,7 +259,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         {isMestre && (
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }}>
             {cv.images.filter(i => i.layer === "map").map(img => (
-              <ImageObject key={img.id} img={img} selected={cv.selImg.includes(img.id)} canSelect={cv.tool === "select"} onSelect={() => { if (!cv.selImg.includes(img.id)) cv.setSelImg([img.id]); }} onUpdate={upd => cv.setImages(p => p.map(i => i.id === img.id ? upd : i))} onDelete={() => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.filter(i => !cv.selImg.includes(i.id))); cv.setSelImg([]); } else { cv.setImages(p => p.filter(i => i.id !== img.id)); } }} onToggleLayer={() => { const tLayer = img.layer === "map" ? "token" : "map"; if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, layer: tLayer } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, layer: tLayer } : i)); } }} onMoveGroup={(dx, dy) => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } }} />
+              <ImageObject key={img.id} img={img} selected={cv.selImg.includes(img.id)} canSelect={cv.tool === "select"} onSelect={() => { if (!cv.selImg.includes(img.id)) cv.setSelImg([img.id]); }} onUpdate={upd => cv.setImages(p => p.map(i => i.id === img.id ? upd : i))} onDelete={() => {}} onToggleLayer={() => {}} onMoveGroup={(dx, dy) => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } }} />
             ))}
           </div>
         )}
@@ -232,7 +267,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         {isMestre && (
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 3 }}>
             {cv.images.filter(i => (i.layer || "token") !== "map").map(img => (
-              <ImageObject key={img.id} img={img} selected={cv.selImg.includes(img.id)} canSelect={cv.tool === "select"} onSelect={() => { if (!cv.selImg.includes(img.id)) cv.setSelImg([img.id]); }} onUpdate={upd => cv.setImages(p => p.map(i => i.id === img.id ? upd : i))} onDelete={() => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.filter(i => !cv.selImg.includes(i.id))); cv.setSelImg([]); } else { cv.setImages(p => p.filter(i => i.id !== img.id)); } }} onToggleLayer={() => { const tLayer = img.layer === "map" ? "token" : "map"; if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, layer: tLayer } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, layer: tLayer } : i)); } }} onMoveGroup={(dx, dy) => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } }} />
+              <ImageObject key={img.id} img={img} selected={cv.selImg.includes(img.id)} canSelect={cv.tool === "select"} onSelect={() => { if (!cv.selImg.includes(img.id)) cv.setSelImg([img.id]); }} onUpdate={upd => cv.setImages(p => p.map(i => i.id === img.id ? upd : i))} onDelete={() => {}} onToggleLayer={() => {}} onMoveGroup={(dx, dy) => { if (cv.selImg.includes(img.id)) { cv.setImages(p => p.map(i => cv.selImg.includes(i.id) ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } else { cv.setImages(p => p.map(i => i.id === img.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)); } }} />
             ))}
           </div>
         )}
@@ -244,7 +279,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   );
 
   if (showCE) return (
-    <div style={{ background: "#0f172a", minHeight: "100vh", padding: "20px", fontFamily: "'Segoe UI',sans-serif" }}>
+    <div style={{ background: "#0f172a", minHeight: "100vh", padding: "20px" }}>
       <button onClick={() => { setShowCE(false); setEditChar(null); }} style={{ background: "transparent", color: "#64748b", border: "none", cursor: "pointer", marginBottom: "16px", fontSize: "14px" }}>← Voltar</button>
       <CharEditor char={editChar} owner={user.username} onSave={saveChar} onCancel={() => { setShowCE(false); setEditChar(null); }} />
     </div>
@@ -294,7 +329,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
             <div style={{ background: "#1e293b", borderRadius: "10px", padding: "12px" }}>
               <label style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>TIPO DE DADO</label>
               <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginTop: "8px" }}>
-                {DICE.map(d => <button key={d} onClick={() => setDt(d)} style={{ background: dt === d ? "#f59e0b" : "#111827", color: dt === d ? "#111" : "#e2e8f0", border: `2px solid ${dt === d ? "#f59e0b" : "#374151"}`, borderRadius: "8px", padding: "7px 10px", cursor: "pointer", fontWeight: "bold", fontSize: "13px", minWidth: "44px", transition: "all .15s" }}>d{d}</button>)}
+                {DICE.map(d => <button key={d} onClick={() => setDt(d)} style={{ background: dt === d ? "#f59e0b" : "#111827", color: dt === d ? "#111" : "#e2e8f0", border: `2px solid ${dt === d ? "#f59e0b" : "#374151"}`, borderRadius: "8px", padding: "7px 10px", cursor: "pointer", fontWeight: "bold", fontSize: "13px", minWidth: "44px" }}>d{d}</button>)}
               </div>
             </div>
             <div style={{ background: "#1e293b", borderRadius: "10px", padding: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -391,7 +426,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
                         <span style={{ fontWeight: "bold", fontSize: "15px" }}>{c.name}</span>
                         <span style={{ background: "#0f172a", borderRadius: "10px", padding: "1px 8px", fontSize: "11px", color: "#f59e0b" }}>Nv.{c.nivel}</span>
                         {c.classe && <span style={{ fontSize: "12px", color: "#94a3b8" }}>{c.classe}</span>}
-                        {c.skills?.length > 0 && <span style={{ fontSize: "11px", color: "#a855f7", background: "#1e0a2e", borderRadius: "10px", padding: "1px 7px" }}>⚡ {c.skills.length}</span>}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "6px" }}>
                         <div><div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>❤️ {c.hp}/{c.hpMax}</div><div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}><div style={{ background: c.hp / c.hpMax > .5 ? "#22c55e" : c.hp / c.hpMax > .25 ? "#eab308" : "#ef4444", width: `${Math.min(100, (c.hp / c.hpMax) * 100)}%`, height: "100%", borderRadius: "4px" }} /></div></div>
@@ -420,7 +454,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
           <div style={{ maxWidth: "460px", margin: "0 auto" }}>
             <h2 style={{ color: "#f59e0b", fontFamily: "Georgia", margin: "0 0 14px" }}>👥 {lobby.name}</h2>
             <div style={{ background: "#1e293b", borderRadius: "12px", padding: "14px", marginBottom: "14px" }}>
-              <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold", marginBottom: "10px" }}>PARTICIPANTES ({members.length})</div>
+              <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold", marginBottom: "10px" }}>PARTICIPANTES ONLINE ({members.length})</div>
               {members.length === 0 && <div style={{ color: "#374151", fontSize: "13px", textAlign: "center", padding: "16px" }}>Ninguém mais na sessão.</div>}
               {members.map(m => (
                 <div key={m.username} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px", background: "#0f172a", borderRadius: "8px", marginBottom: "6px" }}>
