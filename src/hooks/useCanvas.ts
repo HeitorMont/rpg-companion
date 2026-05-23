@@ -121,6 +121,14 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     fgCtx.translate(panXRef.current, panYRef.current);
     fgCtx.scale(zoomRef.current, zoomRef.current);
 
+    // 🛡️ NOVA DEFESA VISUAL: Máscara (Clip)
+    // Corta literalmente QUALQUER pixel que tente sangrar para fora dos 2000x2000!
+    [bgCtx, drawCtx, fgCtx].forEach(ctx => {
+      ctx.beginPath();
+      ctx.rect(0, 0, MUNDO_W, MUNDO_H);
+      ctx.clip();
+    });
+
     // 1. CAMADA DE FUNDO (MAPAS DO MUNDO VIRTUAL)
     bgCtx.fillStyle = "#111827";
     bgCtx.fillRect(0, 0, MUNDO_W, MUNDO_H);
@@ -333,7 +341,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
     e.preventDefault();
     drawing.current = true;
-    linhaAtual.current = { tool, color, brush, points: [{ x: p.x, y: p.y }] };
+
+    // 🛡️ Clampa o traço inicial para ele nascer restrito à lona
+    const cx = Math.max(0, Math.min(p.x, MUNDO_W));
+    const cy = Math.max(0, Math.min(p.y, MUNDO_H));
+    
+    linhaAtual.current = { tool, color, brush, points: [{ x: cx, y: cy }] };
   };
 
   const onMove = (e: any) => {
@@ -350,20 +363,43 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         const dx = p.x - lastP.current.x; const dy = p.y - lastP.current.y;
         setImages(prev => prev.map(img => {
           if (selImgRef.current.includes(img.id) && startTokenPos.current[img.id]) {
-            return { ...img, x: Math.round(startTokenPos.current[img.id].x + dx), y: Math.round(startTokenPos.current[img.id].y + dy) };
+            let nx = Math.round(startTokenPos.current[img.id].x + dx);
+            let ny = Math.round(startTokenPos.current[img.id].y + dy);
+            
+            // 🛡️ Muralha pros Tokens! Impede a imagem de sair pelas bordas
+            nx = Math.max(0, Math.min(nx, MUNDO_W - img.w));
+            ny = Math.max(0, Math.min(ny, MUNDO_H - img.h));
+            
+            return { ...img, x: nx, y: ny };
           }
           return img;
         }));
       } else if (selBox && selStartMundo.current) {
         const start = selStartMundo.current;
-        setSelBox({ x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) });
+        // 🛡️ Impede a caixa de seleção azul de desenhar fora dos limites
+        const cx = Math.max(0, Math.min(p.x, MUNDO_W));
+        const cy = Math.max(0, Math.min(p.y, MUNDO_H));
+        const startX = Math.max(0, Math.min(start.x, MUNDO_W));
+        const startY = Math.max(0, Math.min(start.y, MUNDO_H));
+        
+        setSelBox({ 
+          x: Math.min(startX, cx), 
+          y: Math.min(startY, cy), 
+          w: Math.abs(cx - startX), 
+          h: Math.abs(cy - startY) 
+        });
       }
       return;
     }
 
     if (!drawing.current || !linhaAtual.current || !lastP.current) return;
     e.preventDefault();
-    linhaAtual.current.points.push({ x: p.x, y: p.y });
+    
+    // 🛡️ Se o usuário arrastar a caneta pra fora, o traço desliza travado no canto!
+    const cx = Math.max(0, Math.min(p.x, MUNDO_W));
+    const cy = Math.max(0, Math.min(p.y, MUNDO_H));
+    
+    linhaAtual.current.points.push({ x: cx, y: cy });
     setLinhas([...linhasRef.current, linhaAtual.current]);
   };
 
