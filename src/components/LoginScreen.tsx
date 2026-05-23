@@ -62,7 +62,6 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       if (!ex) { setErr("Usuário não encontrado."); setLoading(false); return; }
       if (ex.pw_hash !== pw) { setErr("Senha incorreta."); setLoading(false); return; }
       
-      // @ts-ignore - Mantém compatibilidade com a sessão do App.tsx temporariamente
       await window.storage.set("rpg_sess", JSON.stringify({ username: ex.username, pwHash: pw }));
       
       // Converte o retorno do banco para o tipo User do TypeScript
