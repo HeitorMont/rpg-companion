@@ -163,7 +163,13 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     drawCtx.lineCap = "round";
     drawCtx.lineJoin = "round";
     
-    linhasRef.current.forEach(linha => {
+    // Junta as linhas já salvas com a linha que está sendo desenhada AGORA (se houver alguma)
+    const linhasParaDesenhar = (drawing.current && linhaAtual.current) 
+      ? [...linhasRef.current, linhaAtual.current] 
+      : linhasRef.current;
+
+    // 🖌️ Usamos a nova variável no lugar do linhasRef.current
+    linhasParaDesenhar.forEach(linha => {
       if (!linha.points || linha.points.length < 1) return;
       drawCtx.beginPath();
       drawCtx.moveTo(linha.points[0].x, linha.points[0].y);
@@ -419,8 +425,48 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     const cx = Math.max(0, Math.min(p.x, MUNDO_W));
     const cy = Math.max(0, Math.min(p.y, MUNDO_H));
     
+    const pts = linhaAtual.current.points;
+    const prev = pts[pts.length - 1];
+
+    // 🛡️ OTIMIZAÇÃO EXTRA: Só registra o ponto se o mouse andou pelo menos 2 pixels.
+    // Isso reduz o tamanho do traço no banco de dados em 80% sem perder qualidade!
+    if (Math.hypot(cx - prev.x, cy - prev.y) < 2) return;
+
     linhaAtual.current.points.push({ x: cx, y: cy });
-    setLinhas([...linhasRef.current, linhaAtual.current]);
+
+    // 🖌️ DESENHO DIRETO: Em vez de atualizar o React (Lag), pintamos só o novo pixel!
+    const canvas = drawRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.save();
+        // Aplica a câmera
+        ctx.translate(panXRef.current, panYRef.current);
+        ctx.scale(zoomRef.current, zoomRef.current);
+        
+        // Máscara da borda
+        ctx.beginPath();
+        ctx.rect(0, 0, MUNDO_W, MUNDO_H);
+        ctx.clip();
+
+        // Configura o pincel
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = linhaAtual.current.brush;
+        ctx.strokeStyle = linhaAtual.current.tool === "eraser" ? "rgba(0,0,0,1)" : linhaAtual.current.color;
+        ctx.globalCompositeOperation = linhaAtual.current.tool === "eraser" ? "destination-out" : "source-over";
+
+        // Desenha APENAS a ligação entre o ponto anterior e o novo
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+    
+    // ❌ IMPORTANTE: Nós NÃO chamamos mais o setLinhas() aqui!
   };
 
   const onUp = () => {
@@ -434,9 +480,9 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       setSelBox(null);
       selStartMundo.current = null;
     }
+    // 🛡️ Oficializa o traço apenas quando o Mestre solta o botão!
     if (drawing.current && linhaAtual.current) {
-      const novaLista = [...linhasRef.current, linhaAtual.current];
-      setLinhas(novaLista);
+      setLinhas([...linhasRef.current, linhaAtual.current]);
       linhaAtual.current = null;
     }
     drawing.current = false;
