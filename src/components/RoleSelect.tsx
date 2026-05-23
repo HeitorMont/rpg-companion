@@ -91,6 +91,9 @@ export default function RoleSelect({ user, lobby, chars, onJoin, onCreateChar, o
       
       await window.storage.set("rpg_cur", JSON.stringify(localMember));
 
+      // 🛡️ CORREÇÃO INJETADA AQUI: Salva a estrutura do Lobby para sobreviver ao F5!
+      await window.storage.set(`rpg_lob:${lobby.id}`, JSON.stringify(lobby));
+
       onJoin(localMember);
     } catch {
       setErr("Erro ao registrar presença no salão da mesa.");
