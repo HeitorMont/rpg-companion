@@ -322,7 +322,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       const novoZoom = Math.min(Math.max(zoomRef.current * fator, 0.15), 4);
       const novoPanX = mouseX - mundoX * novoZoom;
       const novoPanY = mouseY - mundoY * novoZoom;
-      setZoom(novoZoom); setPanX(novoPanX); setPanY(novoPanY);
+      
+      const limite = travarCamera(novoPanX, novoPanY, novoZoom);
+      
+      setZoom(novoZoom); 
+      setPanX(limite.x); 
+      setPanY(limite.y);;
     };
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
@@ -341,7 +346,9 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const onDown = (e: any) => {
     const p = obterPosicaoMundo(e);
     lastP.current = { x: p.x, y: p.y };
+
     if (tool === "pan" || e.button === 1) {
+      e.preventDefault(); // 🛡️ Bloqueia o comportamento padrão do navegador
       panning.current = true;
       startPan.current = { x: p.screenX - panXRef.current, y: p.screenY - panYRef.current };
       return;
@@ -375,11 +382,44 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     linhaAtual.current = { tool, color, brush, points: [{ x: cx, y: cy }] };
   };
 
+// Impede a visão de se perder no Vazio Infinito
+ const travarCamera = (alvoX: number, alvoY: number, zoomAtual: number) => {
+    const cv = bgRef.current;
+    const telaW = cv ? cv.width : window.innerWidth;
+    const telaH = cv ? cv.height : window.innerHeight;
+
+    const mapW = MUNDO_W * zoomAtual;
+    const mapH = MUNDO_H * zoomAtual;
+
+    // A margem elástica de 200 pixels para o mapa não sumir da tela
+    const margemX = Math.min(200, mapW / 2);
+    const margemY = Math.min(200, mapH / 2);
+
+    // Os limites exatos de até onde você pode empurrar o mapa
+    const minX = margemX - mapW;
+    const maxX = telaW - margemX;
+    
+    const minY = margemY - mapH;
+    const maxY = telaH - margemY;
+
+    // Prevenção de segurança absoluta contra bugs de redimensionamento
+    if (minX > maxX || minY > maxY) return { x: alvoX, y: alvoY };
+
+    return {
+      x: Math.max(minX, Math.min(alvoX, maxX)),
+      y: Math.max(minY, Math.min(alvoY, maxY))
+    };
+  };
+
   const onMove = (e: any) => {
     const p = obterPosicaoMundo(e);
     if (panning.current && startPan.current) {
-      setPanX(p.screenX - startPan.current.x);
-      setPanY(p.screenY - startPan.current.y);
+      const nx = p.screenX - startPan.current.x;
+      const ny = p.screenY - startPan.current.y;
+      
+      const limite = travarCamera(nx, ny, zoomRef.current);
+      setPanX(limite.x);
+      setPanY(limite.y);
       return;
     }
     if (!isMestre) return;
