@@ -327,7 +327,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       
       setZoom(novoZoom); 
       setPanX(limite.x); 
-      setPanY(limite.y);;
+      setPanY(limite.y);
     };
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);

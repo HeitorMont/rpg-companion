@@ -184,7 +184,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         clearInterval(iv);
         const res = Array.from({ length: num }, () => Math.floor(Math.random() * dt) + 1);
         const sum = res.reduce((a, b) => a + b, 0);
-        const ab = activeChar && atk !== "none" ? ((activeChar.bonuses as any)[atk] || 0) : 0;
+        const ab = activeChar && atk !== "none" ? ((activeChar.bonuses as any)?.[atk] || 0) : 0;
         const bpdFinal = mb + ab, tbFinal = bpdFinal * num, total = sum + tbFinal;
         const r = { id: Date.now(), label: `${num}d${dt}`, res, mb, ab, bpd: bpdFinal, tb: tbFinal, num, total, attrL: atk !== "none" ? ATTRS.find(a => a.key === atk)?.short : null, isCrit: num === 1 && dt === 20 && res[0] === 20, isFail: num === 1 && dt === 20 && res[0] === 1, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) };
         setLastR(r); setDispN(total); setHist(p => [r, ...p.slice(0, 14)]); setRolling(false);
@@ -192,7 +192,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
     }, 55);
   };
 
-  const currentBpd = mb + (activeChar && atk !== "none" ? ((activeChar.bonuses as any)[atk] || 0) : 0);
+  const currentBpd = mb + (activeChar && atk !== "none" ? ((activeChar.bonuses as any)?.[atk] || 0) : 0);
   const currentTb = currentBpd * num;
   const saveChar = async (c: Character) => { await onSaveChar(c); setShowCE(false); setEditChar(null); };
 
@@ -309,7 +309,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
                   {activeChar.vigorMax > 0 && <div><div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>⚡ {activeChar.vigor}/{activeChar.vigorMax}</div><div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}><div style={{ background: "#3b82f6", width: `${Math.min(100, (activeChar.vigor / activeChar.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} /></div></div>}
                 </div>
                 <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
-                  {ATTRS.map(a => <span key={a.key} style={{ background: "#0f172a", borderRadius: "4px", padding: "2px 5px", fontSize: "10px", color: bc((activeChar.bonuses as any)[a.key] || 0) }}>{a.short}: {((activeChar.bonuses as any)[a.key] || 0) >= 0 ? "+" : " "}{(activeChar.bonuses as any)[a.key] || 0}</span>)}
+                  {ATTRS.map(a => <span key={a.key} style={{ background: "#0f172a", borderRadius: "4px", padding: "2px 5px", fontSize: "10px", color: bc((activeChar.bonuses as any)?.[a.key] || 0) }}>{a.short}: {((activeChar.bonuses as any)?.[a.key] || 0) >= 0 ? "+" : " "}{(activeChar.bonuses as any)?.[a.key] || 0}</span>)}
                 </div>
               </div>
             )}
@@ -342,7 +342,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
                 <label style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>ATRIBUTO (bônus/dado)</label>
                 <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginTop: "8px" }}>
                   <button onClick={() => setAtk("none")} style={{ background: atk === "none" ? "#f59e0b" : "#111827", color: atk === "none" ? "#111" : "#e2e8f0", border: `1px solid ${atk === "none" ? "#f59e0b" : "#374151"}`, borderRadius: "6px", padding: "4px 10px", cursor: "pointer", fontSize: "12px" }}>Nenhum</button>
-                  {ATTRS.map(a => { const bv = (activeChar.bonuses as any)[a.key] || 0; return (
+                  {ATTRS.map(a => { const bv = (activeChar.bonuses as any)?.[a.key] || 0; return (
                     <button key={a.key} onClick={() => setAtk(a.key)} style={{ background: atk === a.key ? "#f59e0b" : "#111827", color: atk === a.key ? "#111" : "#e2e8f0", border: `1px solid ${atk === a.key ? "#f59e0b" : "#374151"}`, borderRadius: "6px", padding: "4px 7px", cursor: "pointer", fontSize: "11px", display: "flex", gap: "3px", alignItems: "center" }}>
                       {a.short}<span style={{ fontWeight: "bold", color: atk === a.key ? "#333" : bc(bv) }}>{bv >= 0 ? "+" : ""}{bv}</span>
                     </button>
