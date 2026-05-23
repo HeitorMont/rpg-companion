@@ -6,10 +6,10 @@ interface StorageItem {
 }
 
 interface CustomWindowStorage {
-  // 🔮 Adicionado o 'global?: boolean' para aceitar o segundo argumento opcional!
+  // O get continua com o global opcional, pois ele pode precisar
   get: (key: string, global?: boolean) => Promise<StorageItem | null>;
   set: (key: string, value: string) => Promise<void>;
-  delete: (key: string, global?: boolean) => Promise<void>;
+  delete: (key: string) => Promise<void>;
 }
 
 // Estende a interface Window nativa do ecossistema do navegador

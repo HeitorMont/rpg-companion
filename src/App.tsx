@@ -139,10 +139,15 @@ export default function App() {
       console.error("Erro ao deletar personagem:", e);
     }
   };
+
   const logout = async () => {
     try { await window.storage.delete("rpg_sess"); } catch {}
     if (member && lobby && user) {
-      try { await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true); await window.storage.delete("rpg_cur"); } catch {} 
+      try { 
+        // 🔮 Removido o ', true' para alinhar com o novo storage.d.ts
+        await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`); 
+        await window.storage.delete("rpg_cur"); 
+      } catch {} 
     }
     setUser(null); setLobby(null); setMember(null); setChars([]); setScreen("login");
   };
@@ -180,7 +185,7 @@ export default function App() {
             .delete()
             .eq("lobby_id", lobby.id)
             .eq("username", user.username);
-          await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`, true);
+          await window.storage.delete(`rpg_mem:${lobby.id}:${user.username}`);
           await window.storage.delete("rpg_cur"); 
         } catch {} 
         setMember(null); 
@@ -188,7 +193,7 @@ export default function App() {
       }} 
       onSaveChar={saveChar} 
       onDeleteChar={deleteChar}
-      onUpdateMember={setMember} // 🔮 Escuta reativa de transmutação de papéis
+      onUpdateMember={setMember} 
     />
   );
   
