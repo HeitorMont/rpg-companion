@@ -21,28 +21,34 @@ export default function App() {
       try {
         const s = await window.storage.get("rpg_sess");
         if (s) {
-          const { username, pwHash } = JSON.parse(s.value);
-          try {
-            const ur = await window.storage.get(`rpg_user:${username.toLowerCase()}`, true);
-            if (ur) {
-              const u = JSON.parse(ur.value);
-              if (u.pwHash === pwHash) {
-                setUser(u); 
-                await loadChars(u.username, pwHash);
-                try {
-                  const cr = await window.storage.get("rpg_cur");
-                  if (cr) { 
-                    const cs = JSON.parse(cr.value); 
-                    const lr = await window.storage.get(`rpg_lob:${cs.lobbyId}`, true); 
-                    if (lr) { setLobby(JSON.parse(lr.value)); setMember(cs); setScreen("game"); return; } 
-                  }
-                } catch {}
-                setScreen("lobbies"); return;
+          const u = JSON.parse(s.value); // { username, pwHash }
+          
+          if (u && u.username && u.pwHash) {
+            // 🛡️ Define o estado do usuário direto com os dados da sessão salva
+            setUser(u); 
+            await loadChars(u.username, u.pwHash);
+            
+            try {
+              const cr = await window.storage.get("rpg_cur");
+              if (cr) { 
+                const cs = JSON.parse(cr.value); 
+                const lr = await window.storage.get(`rpg_lob:${cs.lobbyId}`, true); 
+                if (lr) { 
+                  setLobby(JSON.parse(lr.value)); 
+                  setMember(cs); 
+                  setScreen("game"); 
+                  return; 
+                } 
               }
-            }
-          } catch {}
+            } catch {}
+            
+            setScreen("lobbies"); 
+            return;
+          }
         }
-      } catch {}
+      } catch (e) {
+        console.error("Erro na restauração automática de sessão:", e);
+      }
       setScreen("login");
     })();
   }, []);
