@@ -41,6 +41,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const selImgRef = useRef<string[]>([]);
   const toolRef = useRef("pen");
   const selBoxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null); // 🔮 Nova referência para a caixa
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { panXRef.current = panX; }, [panX]);
@@ -50,6 +51,15 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   useEffect(() => { selImgRef.current = selImg; }, [selImg]);
   useEffect(() => { toolRef.current = tool; }, [tool]);
   useEffect(() => { selBoxRef.current = selBox; }, [selBox]); // 🔮 Sincroniza a caixa de seleção para não ficar obsoleta!
+  useEffect(() => {//Se a imagem for deletada do banco, libera a RAM!
+    const idsAtuais = new Set(images.map(i => i.id));
+    for (const id of imageCache.current.keys()) {
+      if (!idsAtuais.has(id)) {
+        imageCache.current.delete(id);
+      }
+    }
+  }, [images]);
+
 
   const lastP = useRef<{ x: number; y: number } | null>(null);
   const startPan = useRef<{ x: number; y: number } | null>(null);
@@ -134,12 +144,18 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     bgCtx.fillRect(0, 0, MUNDO_W, MUNDO_H);
 
     imagesRef.current.filter(img => img.layer === "map").forEach(img => {
-      const el = new Image();
-      el.src = img.dataUrl;
-      if (el.complete) {
+      let el = imageCache.current.get(img.id);
+      if (!el) {
+        // Primeira vez que vemos essa imagem: instanciamos e salvamos no Cache
+        el = new Image();
+        el.src = img.dataUrl;
+        imageCache.current.set(img.id, el);
+        el.onload = () => renderizarTelaCompleta(); 
+      }
+      
+      // Nas renderizações seguintes (tipo arrastar a tela), ele pula direto pra cá
+      if (el.complete && el.naturalWidth !== 0) {
         bgCtx.drawImage(el, img.x, img.y, img.w, img.h);
-      } else {
-        el.onload = () => renderizarTelaCompleta();
       }
     });
 
@@ -169,12 +185,16 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
     // 3. CAMADA DA FRENTE (TOKENS DE PERSONAGENS E MONSTROS)
     imagesRef.current.filter(img => img.layer !== "map").forEach(img => {
-      const el = new Image();
-      el.src = img.dataUrl;
-      if (el.complete) {
-        fgCtx.drawImage(el, img.x, img.y, img.w, img.h);
-      } else {
+      let el = imageCache.current.get(img.id);
+      if (!el) {
+        el = new Image();
+        el.src = img.dataUrl;
+        imageCache.current.set(img.id, el);
         el.onload = () => renderizarTelaCompleta();
+      }
+      
+      if (el.complete && el.naturalWidth !== 0) {
+        fgCtx.drawImage(el, img.x, img.y, img.w, img.h);
       }
     });
 
@@ -425,6 +445,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const clearCv = async () => {
     setImages([]); setSelImg([]); setLinhas([]);
     linhasRef.current = [];
+    
+    // 🧹 Purifica a memória instantaneamente
+    imageCache.current.clear(); 
+    
     try { await supabase.from("canvas_state").upsert({ lobby_id: lobbyId, drawings: [], images: [], composite_url: "", ts: Date.now() }); } catch {}
   };
 
