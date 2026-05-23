@@ -72,15 +72,32 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     })();
   }, [isMestre, lobbyId]);
 
+  // src/hooks/useCanvas.ts — Substitua o useEffect de salvamento por este:
+
   useEffect(() => {
     if (!isMestre) return;
+    
+    // 🔮 Aumentamos o tempo de debounce para 2 segundos para dar tempo 
+    // de o utilizador terminar de desenhar e não sobrecarregar a API
     const t = setTimeout(async () => {
       try {
-        await supabase.from("canvas_state").upsert({ lobby_id: lobbyId, images: images, drawings: linhasRef.current, ts: Date.now() });
-      } catch {}
-    }, 1500);
+        const { error } = await supabase
+          .from("canvas_state")
+          .upsert({
+            lobby_id: lobbyId,
+            images: images,
+            drawings: linhasRef.current, // O array atualizado
+            ts: Date.now()
+          });
+        
+        if (error) console.error("Erro ao salvar no Supabase:", error);
+      } catch (e) {
+        console.error("Falha na sincronia do Canvas:", e);
+      }
+    }, 2000);
+
     return () => clearTimeout(t);
-  }, [images, isMestre, lobbyId]);
+  }, [images, linhas, isMestre, lobbyId]); // 🔮 ADICIONADO 'linhas' NA DEPENDÊNCIA!
 
   const renderizarTelaCompleta = useCallback(() => {
     const bg = bgRef.current, draw = drawRef.current, fg = fgRef.current;
