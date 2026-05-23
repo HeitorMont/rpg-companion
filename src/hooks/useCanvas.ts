@@ -1,5 +1,5 @@
 // src/hooks/useCanvas.ts
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import type { Linha, ImageObj } from "../types";
 import { supabase } from "../lib/supabase";
 
@@ -43,14 +43,14 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const selBoxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null); // 🔮 Nova referência para a caixa
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
 
-  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  useEffect(() => { panXRef.current = panX; }, [panX]);
-  useEffect(() => { panYRef.current = panY; }, [panY]);
-  useEffect(() => { linhasRef.current = linhas; }, [linhas]);
-  useEffect(() => { imagesRef.current = images; }, [images]);
-  useEffect(() => { selImgRef.current = selImg; }, [selImg]);
-  useEffect(() => { toolRef.current = tool; }, [tool]);
-  useEffect(() => { selBoxRef.current = selBox; }, [selBox]); // 🔮 Sincroniza a caixa de seleção para não ficar obsoleta!
+  useLayoutEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useLayoutEffect(() => { panXRef.current = panX; }, [panX]);
+  useLayoutEffect(() => { panYRef.current = panY; }, [panY]);
+  useLayoutEffect(() => { linhasRef.current = linhas; }, [linhas]);
+  useLayoutEffect(() => { imagesRef.current = images; }, [images]);
+  useLayoutEffect(() => { selImgRef.current = selImg; }, [selImg]);
+  useLayoutEffect(() => { toolRef.current = tool; }, [tool]);
+  useLayoutEffect(() => { selBoxRef.current = selBox; }, [selBox]); 
   useEffect(() => {//Se a imagem for deletada do banco, libera a RAM!
     const idsAtuais = new Set(images.map(i => i.id));
     for (const id of imageCache.current.keys()) {
