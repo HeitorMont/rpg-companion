@@ -43,6 +43,22 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const selBoxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null); // 🔮 Nova referência para a caixa
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
 
+  const lastTouchDistance = useRef<number | null>(null);
+  const lastTouchCenter = useRef<{ x: number; y: number } | null>(null);
+
+  const getPinchDistance = (touches: TouchList) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const getPinchCenter = (touches: TouchList) => {
+    return {
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2,
+    };
+  };
+  
   useLayoutEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useLayoutEffect(() => { panXRef.current = panX; }, [panX]);
   useLayoutEffect(() => { panYRef.current = panY; }, [panY]);
@@ -341,6 +357,13 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   };
 
   const onDown = (e: any) => {
+
+    if (e.touches && e.touches.length === 2) {
+      lastTouchDistance.current = getPinchDistance(e.touches);
+      lastTouchCenter.current = getPinchCenter(e.touches);
+      return; // Interrompe para não desenhar ou interagir com 2 dedos
+    }
+    
     const p = obterPosicaoMundo(e);
     lastP.current = { x: p.x, y: p.y };
 
@@ -409,6 +432,54 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   };
 
   const onMove = (e: any) => {
+
+    if (e.touches && e.touches.length === 2) {
+      e.preventDefault();
+      
+      const cv = bgRef.current;
+      if (!cv) return;
+      
+      const rect = cv.getBoundingClientRect();
+      const currentDistance = getPinchDistance(e.touches);
+      const currentCenter = getPinchCenter(e.touches);
+
+      if (lastTouchDistance.current !== null && lastTouchCenter.current !== null) {
+        // 1. Posição do centro da pinça no frame ANTERIOR (relativa ao canvas)
+        const lastLocalX = lastTouchCenter.current.x - rect.left;
+        const lastLocalY = lastTouchCenter.current.y - rect.top;
+
+        // 2. Descobre que ponto do MUNDO (mapa virtual) estava embaixo dos dedos
+        const mundoX = (lastLocalX - panXRef.current) / zoomRef.current;
+        const mundoY = (lastLocalY - panYRef.current) / zoomRef.current;
+
+        // 3. Calcula o Novo Zoom de forma suave e 1:1 com a distância dos dedos
+        const fator = currentDistance / lastTouchDistance.current;
+        const novoZoom = Math.min(Math.max(zoomRef.current * fator, 0.15), 4);
+
+        // 4. Posição do centro da pinça AGORA (se o jogador arrastar os dois dedos)
+        const currentLocalX = currentCenter.x - rect.left;
+        const currentLocalY = currentCenter.y - rect.top;
+
+        // 5. O SEGREDO MÁGICO: Recalcula o PanX/Y para garantir que aquele ponto
+        // do Mundo (passo 2) esteja exatamente na posição nova dos dedos (passo 4).
+        // Isso resolve o Zoom e o Arrasto simultaneamente!
+        const novoPanX = currentLocalX - mundoX * novoZoom;
+        const novoPanY = currentLocalY - mundoY * novoZoom;
+
+        // Limita a câmera para não perdermos o mapa no vazio
+        const limite = travarCamera(novoPanX, novoPanY, novoZoom);
+
+        setZoom(novoZoom);
+        setPanX(limite.x);
+        setPanY(limite.y);
+      }
+
+      // Salva para o próximo frame
+      lastTouchDistance.current = currentDistance;
+      lastTouchCenter.current = currentCenter;
+      return; // Interrompe a função aqui
+    }
+    
     const p = obterPosicaoMundo(e);
     if (panning.current && startPan.current) {
       const nx = p.screenX - startPan.current.x;
@@ -506,7 +577,13 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     // ❌ IMPORTANTE: Nós NÃO chamamos mais o setLinhas() aqui!
   };
 
-  const onUp = () => {
+  const onUp = (e: any) => {
+
+    if (e && e.touches && e.touches.length < 2) {
+      lastTouchDistance.current = null;
+      lastTouchCenter.current = null;
+    }
+
     panning.current = false;
     movingTokens.current = false;
     if (tool === "select" && selBox) {
