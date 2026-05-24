@@ -81,7 +81,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const startPan = useRef<{ x: number; y: number } | null>(null);
   const startTokenPos = useRef<Record<string, { x: number; y: number }>>({});
   const selStartMundo = useRef<{ x: number; y: number } | null>(null);
-
   const linhaAtual = useRef<Linha | null>(null);
 
   useEffect(() => {
@@ -97,11 +96,8 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     })();
   }, [isMestre, lobbyId]);
 
-  // src/hooks/useCanvas.ts — Substitua o useEffect de salvamento por este:
-
   useEffect(() => {
     if (!isMestre) return;
-    
     // 🔮 Aumentamos o tempo de debounce para 2 segundos para dar tempo 
     // de o utilizador terminar de desenhar e não sobrecarregar a API
     const t = setTimeout(async () => {
@@ -479,7 +475,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       lastTouchCenter.current = currentCenter;
       return; // Interrompe a função aqui
     }
-    
+
     const p = obterPosicaoMundo(e);
     if (panning.current && startPan.current) {
       const nx = p.screenX - startPan.current.x;
