@@ -82,7 +82,9 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const startTokenPos = useRef<Record<string, { x: number; y: number }>>({});
   const selStartMundo = useRef<{ x: number; y: number } | null>(null);
   const linhaAtual = useRef<Linha | null>(null);
-
+  const broadcastRef = useRef<any>(null);
+  const lastBroadcast = useRef(0);
+  
   useEffect(() => {
     if (!isMestre) return;
     (async () => {
@@ -98,16 +100,36 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
   useEffect(() => {
     if (!isMestre) return;
-    // 🔮 Aumentamos o tempo de debounce para 2 segundos para dar tempo 
-    // de o utilizador terminar de desenhar e não sobrecarregar a API
-    const t = setTimeout(async () => {
+
+    // ⚡ 1. TRANSMISSÃO INSTANTÂNEA (~25 FPS) ⚡
+    let tFast: any;
+    const dispararBroadcast = () => {
+      if (broadcastRef.current) {
+        broadcastRef.current.send({
+          type: "broadcast",
+          event: "canvas_fast",
+          payload: { images: images, drawings: linhasRef.current } 
+        });
+      }
+      lastBroadcast.current = Date.now();
+    };
+
+    // Acelerador: limita os envios a 40ms para não estourar a rede
+    if (Date.now() - lastBroadcast.current > 40) {
+      dispararBroadcast();
+    } else {
+      tFast = setTimeout(dispararBroadcast, 40);
+    }
+
+    // 💾 2. PERSISTÊNCIA SEGURA (2 Segundos) 💾
+    const tSlow = setTimeout(async () => {
       try {
         const { error } = await supabase
           .from("canvas_state")
           .upsert({
             lobby_id: lobbyId,
             images: images,
-            drawings: linhasRef.current, // O array atualizado
+            drawings: linhasRef.current,
             ts: Date.now()
           });
         
@@ -117,8 +139,11 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       }
     }, 2000);
 
-    return () => clearTimeout(t);
-  }, [images, linhas, isMestre, lobbyId]); // 🔮 ADICIONADO 'linhas' NA DEPENDÊNCIA!
+    return () => {
+      clearTimeout(tFast);
+      clearTimeout(tSlow);
+    };
+  }, [images, linhas, isMestre, lobbyId]);
 
   const renderizarTelaCompleta = useCallback(() => {
     const bg = bgRef.current, draw = drawRef.current, fg = fgRef.current;
@@ -276,28 +301,40 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     renderizarTelaCompleta();
   }, [linhas, images, zoom, panX, panY, selBox, renderizarTelaCompleta]);
 
+  // ⚡ CANAL DE BROADCAST PARA TODOS E BUSCA INICIAL DOS JOGADORES
   useEffect(() => {
-    if (isMestre || tab !== "tela") return;
-    const carregarDados = async () => {
-      try {
-        const { data } = await supabase.from("canvas_state").select("images, drawings").eq("lobby_id", lobbyId).maybeSingle();
-        if (data) {
-          if (data.images) setImages(data.images as ImageObj[]);
-          if (data.drawings) setLinhas(data.drawings as Linha[]);
-        }
-      } catch {}
-    };
-    carregarDados();
-
-    const canal = supabase.channel(`canvas_sync:${lobbyId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "canvas_state", filter: `lobby_id=eq.${lobbyId}` },
-        (payload) => {
-          if (payload.new) {
-            if (payload.new.images) setImages(payload.new.images as ImageObj[]);
-            if (payload.new.drawings) setLinhas(payload.new.drawings as Linha[]);
+    // 1. Busca Inicial (Apenas para Jogador/Espectador ao entrar na sala)
+    if (!isMestre && tab === "tela") {
+      const carregarDados = async () => {
+        try {
+          const { data } = await supabase.from("canvas_state").select("images, drawings").eq("lobby_id", lobbyId).maybeSingle();
+          if (data) {
+            if (data.images) setImages(data.images as ImageObj[]);
+            if (data.drawings) setLinhas(data.drawings as Linha[]);
           }
-        }
-      ).subscribe();
+        } catch {}
+      };
+      carregarDados();
+    }
+
+    // 2. Cria o Canal de Alta Velocidade para esta mesa específica
+    const canal = supabase.channel(`mesa_live_${lobbyId}`);
+
+    if (!isMestre) {
+      // 3. Jogadores ficam de "ouvidos abertos" para os eventos do Mestre
+      canal.on("broadcast", { event: "canvas_fast" }, (payload) => {
+        if (payload.payload.images) setImages(payload.payload.images);
+        if (payload.payload.drawings) setLinhas(payload.payload.drawings);
+      });
+    }
+
+    // 4. Inscreve no canal e guarda a referência para o Mestre poder usar
+    canal.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        broadcastRef.current = canal;
+      }
+    });
+
     return () => { supabase.removeChannel(canal); };
   }, [isMestre, tab, lobbyId]);
 
