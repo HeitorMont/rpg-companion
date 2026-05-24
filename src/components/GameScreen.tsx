@@ -403,7 +403,18 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
                 {delC === c.id ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <span style={{ color: "#f87171", flex: 1 }}>Deletar <strong>{c.name}</strong>?</span>
-                    <button onClick={() => { onDeleteChar(c.id); setDelC(null); }} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}>Sim</button>
+
+                    <button 
+                      onClick={async () => { 
+                        try {await onDeleteChar(c.id);setDelC(null);
+                        } catch (err) {
+                         console.error("Falha ao deletar personagem:", err);
+                         alert("Não foi possível deletar o personagem. Tente novamente.");
+                       }
+                      }}
+                      style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}
+                    >Sim</button>
+
                     <button onClick={() => setDelC(null)} style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer" }}>Não</button>
                   </div>
                 ) : (

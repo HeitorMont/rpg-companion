@@ -66,7 +66,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const startTokenPos = useRef<Record<string, { x: number; y: number }>>({});
   const selStartMundo = useRef<{ x: number; y: number } | null>(null);
 
-  const canvasOk = useRef(false);
   const linhaAtual = useRef<Linha | null>(null);
 
   useEffect(() => {
@@ -292,7 +291,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
 
   useEffect(() => {
     if ((tab !== "mestre" && tab !== "tela") || !contRef.current) return;
-    canvasOk.current = false;
     const ro = new ResizeObserver(entries => {
       for (const e of entries) {
         const w = Math.round(e.contentRect.width), h = Math.round(e.contentRect.height);
@@ -300,7 +298,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         if (bgRef.current) { bgRef.current.width = w; bgRef.current.height = h; }
         if (drawRef.current) { drawRef.current.width = w; drawRef.current.height = h; }
         if (fgRef.current) { fgRef.current.width = w; fgRef.current.height = h; }
-        canvasOk.current = true;
         renderizarTelaCompleta();
       }
     });

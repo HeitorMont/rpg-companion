@@ -10,7 +10,7 @@ interface CustomWindowStorage {
   set: (key: string, value: string) => Promise<void>;
   delete: (key: string) => Promise<void>;
   // 🛡️ Adicionado o método list que estava faltando!
-  list: () => Promise<StorageItem[]>; 
+  list: (prefix?: string) => Promise<{ keys: string[] }>;
 }
 
 declare global {
