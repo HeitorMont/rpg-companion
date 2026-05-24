@@ -4,8 +4,9 @@ import type { User, Lobby, Character, Member } from "../types";
 import { useCanvas } from "../hooks/useCanvas";
 import { supabase } from "../lib/supabase"; 
 import CharEditor from "./CharEditor";
-import DiceRoller from "./DiceRoller"; // 🔮 Nova importação do nosso componente de dados!
-import { ATTRS, PAL, bc, I } from "../utils/constants"; // (Removidos DICE, TC, e TI daqui, pois agora vivem no DiceRoller)
+import DiceRoller from "./DiceRoller";
+import CharacterList from "./CharacterList"; 
+import { PAL, I } from "../utils/constants";
 
 /* ── GameScreen Main Component ───────────────────────── */
 interface GameScreenProps {
@@ -27,22 +28,13 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   const [members, setMembers] = useState<Member[]>([]);
   const [editChar, setEditChar] = useState<Character | null>(null); 
   const [showCE, setShowCE] = useState(false);
-  const [delC, setDelC] = useState<string | null>(null); 
 
   const cv = useCanvas(lobby.id, isMestre, tab);
 
   useEffect(() => {
     const pingOnline = async () => {
       try {
-        await supabase
-          .from("members")
-          .upsert({
-            lobby_id: lobby.id,
-            username: user.username,
-            role: member.role,
-            char_id: member.charId || null,
-            ts: Date.now()
-          });
+        await supabase.from("members").upsert({ lobby_id: lobby.id, username: user.username, role: member.role, char_id: member.charId || null, ts: Date.now() });
       } catch {}
     };
     pingOnline(); const iv = setInterval(pingOnline, 20000); return () => clearInterval(iv);
@@ -50,21 +42,9 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
   const fetchActiveMembers = async () => {
     try {
-      const { data } = await supabase
-        .from("members")
-        .select("*")
-        .eq("lobby_id", lobby.id);
-      
+      const { data } = await supabase.from("members").select("*").eq("lobby_id", lobby.id);
       if (data) {
-        const active = data
-          .filter((m: any) => Date.now() - m.ts < 40000)
-          .map((m: any) => ({
-            lobbyId: m.lobby_id,
-            username: m.username,
-            role: m.role,
-            charId: m.char_id,
-            ts: m.ts
-          }));
+        const active = data.filter((m: any) => Date.now() - m.ts < 40000).map((m: any) => ({ lobbyId: m.lobby_id, username: m.username, role: m.role, charId: m.char_id, ts: m.ts }));
         setMembers(active);
       }
     } catch {}
@@ -72,52 +52,24 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
   useEffect(() => {
     fetchActiveMembers();
-    
-    const canalPresenca = supabase
-      .channel(`lobby_members:${lobby.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "members", filter: `lobby_id=eq.${lobby.id}` },
-        () => { fetchActiveMembers(); }
-      )
-      .subscribe();
-
+    const canalPresenca = supabase.channel(`lobby_members:${lobby.id}`).on("postgres_changes", { event: "*", schema: "public", table: "members", filter: `lobby_id=eq.${lobby.id}` }, () => { fetchActiveMembers(); }).subscribe();
     return () => { supabase.removeChannel(canalPresenca); };
   }, [lobby.id]);
 
   const handleSwitchRoleInsideGame = async (newRole: "mestre" | "jogador" | "espectador", chosenCharId: string | null) => {
     try {
       const timestamp = Date.now();
-      const updatedMemberData = {
-        lobby_id: lobby.id,
-        username: user.username,
-        role: newRole,
-        char_id: newRole === "jogador" ? chosenCharId : null,
-        ts: timestamp
-      };
-
+      const updatedMemberData = { lobby_id: lobby.id, username: user.username, role: newRole, char_id: newRole === "jogador" ? chosenCharId : null, ts: timestamp };
       const { error } = await supabase.from("members").upsert(updatedMemberData);
       if (error) throw error;
 
-      const localMemberObj: Member = {
-        lobbyId: lobby.id,
-        username: user.username,
-        role: newRole,
-        charId: newRole === "jogador" ? chosenCharId : null,
-        ts: timestamp
-      };
-
+      const localMemberObj: Member = { lobbyId: lobby.id, username: user.username, role: newRole, charId: newRole === "jogador" ? chosenCharId : null, ts: timestamp };
       await window.storage.set("rpg_cur", JSON.stringify(localMemberObj));
       onUpdateMember(localMemberObj);
 
-      const allowed = newRole === "mestre" 
-        ? ["dados", "mestre", "sessao"]
-        : newRole === "espectador" ? ["tela", "sessao"] : ["dados", "personagens", "tela", "sessao"];
-      
+      const allowed = newRole === "mestre" ? ["dados", "mestre", "sessao"] : newRole === "espectador" ? ["tela", "sessao"] : ["dados", "personagens", "tela", "sessao"];
       if (!allowed.includes(tab)) setTab(allowed[0]);
-    } catch {
-      alert("⚠️ Erro ao transmutar papel no servidor.");
-    }
+    } catch { alert("⚠️ Erro ao transmutar papel no servidor."); }
   };
 
   const saveChar = async (c: Character) => { await onSaveChar(c); setShowCE(false); setEditChar(null); };
@@ -130,22 +82,13 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
             <button key={t} onClick={() => { cv.setTool(t); if (t !== "select") cv.setSelImg([]); }} style={{ background: cv.tool === t ? "#f59e0b" : "#111827", color: cv.tool === t ? "#111" : "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>{l}</button>
           ))}
           {cv.tool !== "select" && cv.tool !== "eraser" && cv.tool !== "pan" && (
-            <div style={{ display: "flex", gap: "4px" }}>
-              {PAL.map(cl => (
-                <button key={cl} onClick={() => { cv.setColor(cl); cv.setTool("pen"); }} style={{ width: "22px", height: "22px", background: cl, border: cv.color === cl && cv.tool === "pen" ? "3px solid white" : "2px solid #334155", borderRadius: "50%", cursor: "pointer" }} />
-              ))}
-            </div>
+            <div style={{ display: "flex", gap: "4px" }}>{PAL.map(cl => (<button key={cl} onClick={() => { cv.setColor(cl); cv.setTool("pen"); }} style={{ width: "22px", height: "22px", background: cl, border: cv.color === cl && cv.tool === "pen" ? "3px solid white" : "2px solid #334155", borderRadius: "50%", cursor: "pointer" }} />))}</div>
           )}
           {cv.tool !== "select" && cv.tool !== "pan" && (
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <span style={{ fontSize: "12px", color: "#64748b" }}>Tam:</span>
-              <input type="range" min="2" max="30" value={cv.brush} onChange={e => cv.setBrush(+e.target.value)} style={{ width: "56px" }} />
-              <span style={{ fontSize: "12px", color: "#64748b" }}>{cv.brush}</span>
-            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ fontSize: "12px", color: "#64748b" }}>Tam:</span><input type="range" min="2" max="30" value={cv.brush} onChange={e => cv.setBrush(+e.target.value)} style={{ width: "56px" }}/><span style={{ fontSize: "12px", color: "#64748b" }}>{cv.brush}</span></div>
           )}
           {cv.tool === "select" && cv.images.length === 0 && <span style={{ fontSize: "12px", color: "#475569", fontStyle: "italic" }}>Adicione uma imagem para selecionar</span>}
-          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção ativa — arraste os tokens na lona</span>}
-
+          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção ativa — arraste os tokens</span>}
           {cv.selImg.length > 0 && (
             <div style={{ display: "flex", gap: "8px", borderLeft: "2px solid #334155", paddingLeft: "8px", marginLeft: "4px" }}>
               <button onClick={() => cv.setImages(prev => prev.map(i => cv.selImg.includes(i.id) ? { ...i, layer: "token" } : i))} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>⬆️ Frente</button>
@@ -162,21 +105,11 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       )}
       {!isMestre && (
         <div style={{ background: "#1e293b", padding: "8px 12px", display: "flex", gap: "10px", alignItems: "center", borderBottom: "1px solid #334155" }}>
-          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🖐️ Arraste com o clique e use o Scroll do mouse para dar Zoom na mesa</span>
+          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🖐️ Arraste com o clique e use o Scroll/Pinça do mouse para dar Zoom na mesa</span>
           <div style={{ marginLeft: "auto", width: "8px", height: "8px", background: "#22c55e", borderRadius: "50%" }} />
         </div>
       )}
-      
-      {/* 🔮 A LONA TRIPLA UNIFICADA DA MESA DE JOGO */}
-      <div 
-        ref={cv.contRef} 
-        style={{ 
-          flex: 1, overflow: "hidden", background: "#0b0f19", position: "relative", touchAction: "none", 
-          cursor: cv.tool === "pan" ? "grab" : (cv.tool === "select" ? "default" : "crosshair") 
-        }} 
-        onMouseDown={cv.onDown} onMouseMove={cv.onMove} onMouseUp={cv.onUp} onMouseLeave={cv.onUp} 
-        onTouchStart={cv.onDown} onTouchMove={cv.onMove} onTouchEnd={cv.onUp}
-      >
+      <div ref={cv.contRef} style={{ flex: 1, overflow: "hidden", background: "#0b0f19", position: "relative", touchAction: "none", cursor: cv.tool === "pan" ? "grab" : (cv.tool === "select" ? "default" : "crosshair") }} onMouseDown={cv.onDown} onMouseMove={cv.onMove} onMouseUp={cv.onUp} onMouseLeave={cv.onUp} onTouchStart={cv.onDown} onTouchMove={cv.onMove} onTouchEnd={cv.onUp}>
         <canvas ref={cv.bgRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
         <canvas ref={cv.drawRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
         <canvas ref={cv.fgRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
@@ -199,79 +132,23 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         <span style={{ fontSize: "20px" }}>🎲</span>
         <span style={{ color: "#f59e0b", fontSize: "16px", fontWeight: "bold", fontFamily: "Georgia", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "130px" }}>{lobby.name}</span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
-          {isMestre ? <span style={{ background: "#422006", border: "1px solid #f59e0b", borderRadius: "20px", padding: "2px 8px", fontSize: "11px", color: "#f59e0b", fontWeight: "bold" }}>👑 Mestre</span>
-            : isEsp ? <span style={{ background: "#0f172a", border: "1px solid #64748b", borderRadius: "20px", padding: "2px 8px", fontSize: "11px", color: "#94a3b8" }}>👁️ Espectador</span>
-              : <span style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: "20px", padding: "2px 8px", fontSize: "11px", color: "#60a5fa" }}>⚔️ {activeChar?.name || user.username}</span>}
+          {isMestre ? <span style={{ background: "#422006", border: "1px solid #f59e0b", borderRadius: "20px", padding: "2px 8px", fontSize: "11px", color: "#f59e0b", fontWeight: "bold" }}>👑 Mestre</span> : isEsp ? <span style={{ background: "#0f172a", border: "1px solid #64748b", borderRadius: "20px", padding: "2px 8px", fontSize: "11px", color: "#94a3b8" }}>👁️ Espectador</span> : <span style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: "20px", padding: "2px 8px", fontSize: "11px", color: "#60a5fa" }}>⚔️ {activeChar?.name || user.username}</span>}
           <button onClick={onLeave} style={{ background: "transparent", color: "#64748b", border: "none", cursor: "pointer", fontSize: "12px" }}>Sair</button>
         </div>
       </div>
 
       <div style={{ display: "flex", background: "#1e293b", borderBottom: "1px solid #0f172a" }}>
         {TABS.map(([id, ico]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "9px 2px", background: "none", border: "none", borderBottom: tab === id ? "3px solid #f59e0b" : "3px solid transparent", color: tab === id ? "#f59e0b" : "#64748b", cursor: "pointer", fontSize: "11px", transition: "all .2s" }}>
-            <div style={{ fontSize: "16px" }}>{ico}</div>
-            <div style={{ fontWeight: tab === id ? "bold" : "normal" }}>{TLABELS[id]}</div>
-          </button>
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "9px 2px", background: "none", border: "none", borderBottom: tab === id ? "3px solid #f59e0b" : "3px solid transparent", color: tab === id ? "#f59e0b" : "#64748b", cursor: "pointer", fontSize: "11px", transition: "all .2s" }}><div style={{ fontSize: "16px" }}>{ico}</div><div style={{ fontWeight: tab === id ? "bold" : "normal" }}>{TLABELS[id]}</div></button>
         ))}
       </div>
 
       <div style={{ flex: 1, overflowY: (tab === "mestre" || tab === "tela") ? "hidden" : "auto", padding: (tab === "mestre" || tab === "tela") ? "0" : "14px", display: (tab === "mestre" || tab === "tela") ? "flex" : "block", flexDirection: "column" }}>
         
-        {/* 🔮 AQUI ESTÁ O NOSSO COMPONENTE IMPORTADO LIMPÍSSIMO! */}
-        {tab === "dados" && (
-          <DiceRoller activeChar={activeChar} />
-        )}
+        {tab === "dados" && <DiceRoller activeChar={activeChar} />}
 
         {tab === "personagens" && (
-          <div style={{ maxWidth: "560px", margin: "0 auto" }}>
-            <h2 style={{ color: "#f59e0b", fontFamily: "Georgia", margin: "0 0 14px" }}>Personagens</h2>
-            {chars.length === 0 && <div style={{ textAlign: "center", padding: "40px", color: "#374151" }}><div style={{ fontSize: "40px" }}>⚔️</div><div>Nenhum personagem.</div></div>}
-            {chars.map(c => (
-              <div key={c.id} style={{ background: "#1e293b", border: `2px solid ${member.charId === c.id ? "#3b82f6" : "#334155"}`, borderRadius: "12px", padding: "14px", marginBottom: "10px" }}>
-                {delC === c.id ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <span style={{ color: "#f87171", flex: 1 }}>Deletar <strong>{c.name}</strong>?</span>
-
-                    <button 
-                      onClick={async () => { 
-                        try {await onDeleteChar(c.id);setDelC(null);
-                        } catch (err) {
-                         console.error("Falha ao deletar personagem:", err);
-                         alert("Não foi possível deletar o personagem. Tente novamente.");
-                       }
-                      }}
-                      style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}
-                    >Sim</button>
-
-                    <button onClick={() => setDelC(null)} style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer" }}>Não</button>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: "bold", fontSize: "15px" }}>{c.name}</span>
-                        <span style={{ background: "#0f172a", borderRadius: "10px", padding: "1px 8px", fontSize: "11px", color: "#f59e0b" }}>Nv.{c.nivel}</span>
-                        {c.classe && <span style={{ fontSize: "12px", color: "#94a3b8" }}>{c.classe}</span>}
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "6px" }}>
-                        <div><div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>❤️ {c.hp}/{c.hpMax}</div><div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}><div style={{ background: c.hp / c.hpMax > .5 ? "#22c55e" : c.hp / c.hpMax > .25 ? "#eab308" : "#ef4444", width: `${Math.min(100, (c.hp / c.hpMax) * 100)}%`, height: "100%", borderRadius: "4px" }} /></div></div>
-                        {c.vigorMax > 0 && <div><div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>⚡ {c.vigor}/{c.vigorMax}</div><div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}><div style={{ background: "#3b82f6", width: `${Math.min(100, (c.vigor / c.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} /></div></div>}
-                      </div>
-                      <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
-                        {ATTRS.map(a => <span key={a.key} style={{ background: "#0f172a", borderRadius: "4px", padding: "2px 5px", fontSize: "10px", color: bc((c.bonuses as any)[a.key] || 0) }}>{a.short}: {((c.bonuses as any)[a.key] || 0) >= 0 ? "+" : " "}{(c.bonuses as any)[a.key] || 0}</span>)}
-                      </div>
-                    </div>
-                    {!isMestre && c.owner === user.username && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: "70px" }}>
-                        <button onClick={() => { setEditChar(c); setShowCE(true); }} style={{ background: "#111827", color: "#94a3b8", border: "1px solid #374151", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>✏️</button>
-                        <button onClick={() => setDelC(c.id)} style={{ background: "#111827", color: "#ef4444", border: "1px solid #ef4444", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "12px" }}>🗑️</button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <CharacterList chars={chars} member={member} user={user} isMestre={isMestre} onDeleteChar={onDeleteChar} onEditChar={(c) => { setEditChar(c); setShowCE(true); }} />
         )}
 
         {(tab === "mestre" || tab === "tela") && canvasPanelJSX}
@@ -279,31 +156,19 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         {tab === "sessao" && (
           <div style={{ maxWidth: "460px", margin: "0 auto" }}>
             <h2 style={{ color: "#f59e0b", fontFamily: "Georgia", margin: "0 0 14px" }}>👥 {lobby.name}</h2>
-            
             <div style={{ background: "#1e293b", borderRadius: "12px", padding: "14px", marginBottom: "14px", display: "grid", gap: "10px", border: "1px solid #334155" }}>
               <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>⚡ TRANSMUTAR SEU PAPEL ATUAL</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
-                <button onClick={() => handleSwitchRoleInsideGame("mestre", null)} disabled={isAnotherMasterActive} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "mestre" ? "#f59e0b" : "#111827", color: member.role === "mestre" ? "#111" : isAnotherMasterActive ? "#374151" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: isAnotherMasterActive ? "not-allowed" : "pointer", opacity: isAnotherMasterActive ? 0.4 : 1 }} title={isAnotherMasterActive ? "Bloqueado: Já existe um Mestre comandando a mesa" : "Assumir a coroa do Mestre"}>👑 Mestre</button>
+                <button onClick={() => handleSwitchRoleInsideGame("mestre", null)} disabled={isAnotherMasterActive} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "mestre" ? "#f59e0b" : "#111827", color: member.role === "mestre" ? "#111" : isAnotherMasterActive ? "#374151" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: isAnotherMasterActive ? "not-allowed" : "pointer", opacity: isAnotherMasterActive ? 0.4 : 1 }}>👑 Mestre</button>
                 <button onClick={() => handleSwitchRoleInsideGame("espectador", null)} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "espectador" ? "#a855f7" : "#111827", color: member.role === "espectador" ? "#fff" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>👁️ Assistir</button>
-                <button onClick={() => {
-                  if (chars.length > 0) handleSwitchRoleInsideGame("jogador", member.charId || chars[0].id);
-                  else alert("Forje um herói na Armaria do menu inicial primeiro!");
-                }} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "jogador" ? "#3b82f6" : "#111827", color: member.role === "jogador" ? "#fff" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>⚔️ Jogador</button>
+                <button onClick={() => { if (chars.length > 0) handleSwitchRoleInsideGame("jogador", member.charId || chars[0].id); else alert("Forje um herói na Armaria primeiro!"); }} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "jogador" ? "#3b82f6" : "#111827", color: member.role === "jogador" ? "#fff" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>⚔️ Jogador</button>
               </div>
-
-              {isAnotherMasterActive && (
-                <div style={{ color: "#f87171", fontSize: "11px", fontStyle: "italic", textAlign: "center" }}>
-                  ⚠️ O Trono do Mestre já está ocupado por outro narrador ativo.
-                </div>
-              )}
-
+              {isAnotherMasterActive && <div style={{ color: "#f87171", fontSize: "11px", fontStyle: "italic", textAlign: "center" }}>⚠️ O Trono do Mestre já está ocupado.</div>}
               {member.role === "jogador" && chars.length > 1 && (
                 <div style={{ display: "grid", gap: "4px", marginTop: "4px", borderTop: "1px solid #334155", paddingTop: "8px" }}>
                   <label style={{ color: "#9ca3af", fontSize: "10px", fontWeight: "bold" }}>MUDAR DE HERÓI ATIVO NESTA MESA:</label>
                   <select style={{ ...I, padding: "6px", fontSize: "12px" }} value={member.charId || ""} onChange={(e) => handleSwitchRoleInsideGame("jogador", e.target.value)}>
-                    {chars.map(c => (
-                      <option key={c.id} value={c.id} style={{ background: "#111827" }}>{c.name} (Nv. {c.nivel} - {c.classe})</option>
-                    ))}
+                    {chars.map(c => <option key={c.id} value={c.id} style={{ background: "#111827" }}>{c.name} (Nv. {c.nivel} - {c.classe})</option>)}
                   </select>
                 </div>
               )}
@@ -315,10 +180,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
               {members.map(m => (
                 <div key={m.username} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px", background: "#0f172a", borderRadius: "8px", marginBottom: "6px" }}>
                   <span style={{ fontSize: "18px" }}>{m.role === "mestre" ? "👑" : m.role === "espectador" ? "👁️" : "⚔️"}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: "bold", fontSize: "14px" }}>{m.username}{m.username === user.username ? " (você)" : ""}</div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "capitalize" }}>{m.role}</div>
-                  </div>
+                  <div style={{ flex: 1 }}><div style={{ fontWeight: "bold", fontSize: "14px" }}>{m.username}{m.username === user.username ? " (você)" : ""}</div><div style={{ fontSize: "11px", color: "#64748b", textTransform: "capitalize" }}>{m.role}</div></div>
                 </div>
               ))}
             </div>
