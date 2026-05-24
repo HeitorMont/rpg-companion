@@ -4,31 +4,7 @@ import type { User, Lobby, Character, Member } from "../types";
 import { useCanvas } from "../hooks/useCanvas";
 import { supabase } from "../lib/supabase"; 
 import CharEditor from "./CharEditor";
-
-const DICE = [4, 6, 8, 10, 12, 20, 100];
-const ATTRS = [
-  { key: "for", short: "FOR", label: "Força" }, { key: "des", short: "DES", label: "Destreza" },
-  { key: "con", short: "CON", label: "Constituição" }, { key: "int", short: "INT", label: "Inteligência" },
-  { key: "sab", short: "SAB", label: "Sabedoria" }, { key: "car", short: "CAR", label: "Carisma" },
-  { key: "sob", short: "SOB", label: "Sobrevivência" }, { key: "sor", short: "SOR", label: "Sorte" },
-  { key: "fe", short: "FÉ", label: "Fé" },
-];
-const PAL = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316", "#ffffff", "#94a3b8"];
-const TC: Record<string, string> = { passiva: "#60a5fa", ativa: "#f59e0b", ataque: "#ef4444", especial: "#a855f7" };
-const TI: Record<string, string> = { passiva: "🛡️", ativa: "⚡", ataque: "⚔️", especial: "✨" };
-
-const bc = (v: number) => (v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#475569");
-
-const I = {
-  background: "#111827",
-  border: "1px solid #374151",
-  borderRadius: "8px",
-  padding: "8px 10px",
-  color: "#e5e7eb",
-  fontSize: "14px",
-  width: "100%",
-  boxSizing: "border-box" as const,
-};
+import { DICE, ATTRS, PAL, TC, TI, bc, I } from "../utils/constants";
 
 /* ── SkillPanel ──────────────────────────────────────── */
 function SkillPanel({ char }: { char: Character | null }) {
