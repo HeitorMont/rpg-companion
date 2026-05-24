@@ -5,8 +5,9 @@ import { useCanvas } from "../hooks/useCanvas";
 import { supabase } from "../lib/supabase"; 
 import CharEditor from "./CharEditor";
 import DiceRoller from "./DiceRoller";
-import CharacterList from "./CharacterList"; 
-import { PAL, I } from "../utils/constants";
+import CharacterList from "./CharacterList";
+import SessionPanel from "./SessionPanel";
+import { PAL } from "../utils/constants";
 
 /* ── GameScreen Main Component ───────────────────────── */
 interface GameScreenProps {
@@ -88,7 +89,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ fontSize: "12px", color: "#64748b" }}>Tam:</span><input type="range" min="2" max="30" value={cv.brush} onChange={e => cv.setBrush(+e.target.value)} style={{ width: "56px" }}/><span style={{ fontSize: "12px", color: "#64748b" }}>{cv.brush}</span></div>
           )}
           {cv.tool === "select" && cv.images.length === 0 && <span style={{ fontSize: "12px", color: "#475569", fontStyle: "italic" }}>Adicione uma imagem para selecionar</span>}
-          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção ativa — arraste os tokens</span>}
+          {cv.tool === "select" && cv.selImg.length > 0 && <span style={{ fontSize: "12px", color: "#60a5fa" }}>✓ Seleção activa — arraste os tokens</span>}
           {cv.selImg.length > 0 && (
             <div style={{ display: "flex", gap: "8px", borderLeft: "2px solid #334155", paddingLeft: "8px", marginLeft: "4px" }}>
               <button onClick={() => cv.setImages(prev => prev.map(i => cv.selImg.includes(i.id) ? { ...i, layer: "token" } : i))} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>⬆️ Frente</button>
@@ -105,7 +106,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       )}
       {!isMestre && (
         <div style={{ background: "#1e293b", padding: "8px 12px", display: "flex", gap: "10px", alignItems: "center", borderBottom: "1px solid #334155" }}>
-          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🖐️ Arraste com o clique e use o Scroll/Pinça do mouse para dar Zoom na mesa</span>
+          <span style={{ fontSize: "13px", color: "#94a3b8" }}>🖐️ Arraste com o clique e use o Scroll/Pinça do ecrã para dar Zoom na mesa</span>
           <div style={{ marginLeft: "auto", width: "8px", height: "8px", background: "#22c55e", borderRadius: "50%" }} />
         </div>
       )}
@@ -153,39 +154,18 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
         {(tab === "mestre" || tab === "tela") && canvasPanelJSX}
 
+        {/* 🔮 AQUI ESTÁ O PAINEL DE SESSÃO IMPORTADO E ULTRA ORGANIZADO! */}
         {tab === "sessao" && (
-          <div style={{ maxWidth: "460px", margin: "0 auto" }}>
-            <h2 style={{ color: "#f59e0b", fontFamily: "Georgia", margin: "0 0 14px" }}>👥 {lobby.name}</h2>
-            <div style={{ background: "#1e293b", borderRadius: "12px", padding: "14px", marginBottom: "14px", display: "grid", gap: "10px", border: "1px solid #334155" }}>
-              <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>⚡ TRANSMUTAR SEU PAPEL ATUAL</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
-                <button onClick={() => handleSwitchRoleInsideGame("mestre", null)} disabled={isAnotherMasterActive} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "mestre" ? "#f59e0b" : "#111827", color: member.role === "mestre" ? "#111" : isAnotherMasterActive ? "#374151" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: isAnotherMasterActive ? "not-allowed" : "pointer", opacity: isAnotherMasterActive ? 0.4 : 1 }}>👑 Mestre</button>
-                <button onClick={() => handleSwitchRoleInsideGame("espectador", null)} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "espectador" ? "#a855f7" : "#111827", color: member.role === "espectador" ? "#fff" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>👁️ Assistir</button>
-                <button onClick={() => { if (chars.length > 0) handleSwitchRoleInsideGame("jogador", member.charId || chars[0].id); else alert("Forje um herói na Armaria primeiro!"); }} style={{ padding: "8px 2px", borderRadius: "6px", border: "none", background: member.role === "jogador" ? "#3b82f6" : "#111827", color: member.role === "jogador" ? "#fff" : "#e2e8f0", fontSize: "12px", fontWeight: "bold", cursor: "pointer" }}>⚔️ Jogador</button>
-              </div>
-              {isAnotherMasterActive && <div style={{ color: "#f87171", fontSize: "11px", fontStyle: "italic", textAlign: "center" }}>⚠️ O Trono do Mestre já está ocupado.</div>}
-              {member.role === "jogador" && chars.length > 1 && (
-                <div style={{ display: "grid", gap: "4px", marginTop: "4px", borderTop: "1px solid #334155", paddingTop: "8px" }}>
-                  <label style={{ color: "#9ca3af", fontSize: "10px", fontWeight: "bold" }}>MUDAR DE HERÓI ATIVO NESTA MESA:</label>
-                  <select style={{ ...I, padding: "6px", fontSize: "12px" }} value={member.charId || ""} onChange={(e) => handleSwitchRoleInsideGame("jogador", e.target.value)}>
-                    {chars.map(c => <option key={c.id} value={c.id} style={{ background: "#111827" }}>{c.name} (Nv. {c.nivel} - {c.classe})</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div style={{ background: "#1e293b", borderRadius: "12px", padding: "14px", marginBottom: "14px" }}>
-              <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold", marginBottom: "10px" }}>PARTICIPANTES ONLINE ({members.length})</div>
-              {members.length === 0 && <div style={{ color: "#374151", fontSize: "13px", textAlign: "center", padding: "16px" }}>Ninguém mais na sessão.</div>}
-              {members.map(m => (
-                <div key={m.username} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px", background: "#0f172a", borderRadius: "8px", marginBottom: "6px" }}>
-                  <span style={{ fontSize: "18px" }}>{m.role === "mestre" ? "👑" : m.role === "espectador" ? "👁️" : "⚔️"}</span>
-                  <div style={{ flex: 1 }}><div style={{ fontWeight: "bold", fontSize: "14px" }}>{m.username}{m.username === user.username ? " (você)" : ""}</div><div style={{ fontSize: "11px", color: "#64748b", textTransform: "capitalize" }}>{m.role}</div></div>
-                </div>
-              ))}
-            </div>
-            <button onClick={onLeave} style={{ background: "#1c0a0a", color: "#ef4444", border: "1px solid #ef4444", borderRadius: "8px", padding: "10px", cursor: "pointer", fontWeight: "bold", width: "100%" }}>🚪 Sair do Lobby</button>
-          </div>
+          <SessionPanel 
+            lobby={lobby} 
+            member={member} 
+            user={user} 
+            chars={chars} 
+            members={members} 
+            isAnotherMasterActive={isAnotherMasterActive} 
+            onSwitchRole={handleSwitchRoleInsideGame} 
+            onLeave={onLeave} 
+          />
         )}
       </div>
     </div>
