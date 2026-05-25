@@ -655,7 +655,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         ctx.clip();
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        ctx.lineWidth = linhaAtual.current.brush;
+        ctx.lineWidth = linhaAtual.current.tool === "eraser" ? linhaAtual.current.brush * 5 : linhaAtual.current.brush;
         ctx.strokeStyle = linhaAtual.current.tool === "eraser" ? "rgba(0,0,0,1)" : linhaAtual.current.color;
         ctx.globalCompositeOperation = linhaAtual.current.tool === "eraser" ? "destination-out" : "source-over";
         ctx.beginPath();
