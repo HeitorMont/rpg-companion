@@ -17,37 +17,32 @@ interface CanvasToolbarProps {
 
 function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
   const [showColorPop, setShowColorPop] = useState(false);
+  const [showSizePop, setShowSizePop] = useState(false); // 🔮 Nova memória para o menu de Tamanho
   const colorPopRef = useRef<HTMLDivElement>(null);
+  const sizePopRef = useRef<HTMLDivElement>(null);
 
-  // Fecha o popup de cores ao clicar fora dele
+  // Fecha os popups ao clicar fora deles
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (colorPopRef.current && !colorPopRef.current.contains(e.target as Node)) {
         setShowColorPop(false);
+      }
+      if (sizePopRef.current && !sizePopRef.current.contains(e.target as Node)) {
+        setShowSizePop(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // 🛡️ ESCUDO DO JOGADOR/ESPECTADOR: Mostra apenas uma badge minimalista e limpa no rodapé
+  // 🛡️ ESCUDO DO JOGADOR/ESPECTADOR
   if (!isMestre) {
     return (
       <div style={{
-        position: "absolute",
-        bottom: "14px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        background: "#1e293b",
-        border: "1px solid #334155",
-        borderRadius: "12px",
-        padding: "8px 14px",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        zIndex: 20,
-        boxShadow: "0 4px 24px rgba(0,0,0,.55)",
-        whiteSpace: "nowrap"
+        position: "absolute", bottom: "14px", left: "50%", transform: "translateX(-50%)",
+        background: "#1e293b", border: "1px solid #334155", borderRadius: "12px",
+        padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px",
+        zIndex: 20, boxShadow: "0 4px 24px rgba(0,0,0,.55)", whiteSpace: "nowrap"
       }}>
         <div style={{ width: "8px", height: "8px", background: "#22c55e", borderRadius: "50%" }} />
         <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "bold" }}>🖐️ Navegação Livre (Arrastar / Zoom)</span>
@@ -55,7 +50,7 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
     );
   }
 
-  // 👑 CONFIGURAÇÃO DO MESTRE: Ferramentas completas na Dock Flutuante
+  // 👑 CONFIGURAÇÃO DO MESTRE
   const tools = [
     { id: "pan", icon: "✋", label: "Arrastar" },
     { id: "select", icon: "🖱️", label: "Selecionar" },
@@ -67,40 +62,33 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
 
   return (
     <>
-      {/* ── BARRA FLUTUANTE UNIVERSAL (Dock Style para PC e Mobile) ── */}
+      {/* ── BARRA FLUTUANTE UNIVERSAL ── */}
       <div style={{
-        position: "absolute",
-        bottom: "14px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        background: "#1e293b",
-        border: "1px solid #334155",
-        borderRadius: "16px",
-        padding: "6px 8px",
-        display: "flex",
-        alignItems: "center",
-        gap: "4px",
-        zIndex: 20,
-        boxShadow: "0 4px 24px rgba(0,0,0,.55)",
+        position: "absolute", bottom: "14px", left: "50%", transform: "translateX(-50%)",
+        background: "#1e293b", border: "1px solid #334155", borderRadius: "16px",
+        padding: "6px 8px", display: "flex", alignItems: "center", gap: "4px",
+        zIndex: 20, boxShadow: "0 4px 24px rgba(0,0,0,.55)",
       }}>
 
-        {/* Botões das Ferramentas */}
+        {/* Botões das Ferramentas Principais */}
         {tools.map(t => (
           <button
             key={t.id}
             title={t.label}
-            onClick={() => { cv.setTool(t.id); if (t.id !== "select") cv.setSelImg([]); setShowColorPop(false); }}
+            onClick={() => { 
+              cv.setTool(t.id); 
+              if (t.id !== "select") cv.setSelImg([]); 
+              // Fecha todos os menus extras ao trocar de ferramenta
+              setShowColorPop(false); 
+              setShowSizePop(false); 
+            }}
             style={{
-              width: "40px", height: "40px",
-              borderRadius: "11px",
-              border: "none",
+              width: "40px", height: "40px", borderRadius: "11px", border: "none",
               background: cv.tool === t.id ? "#f59e0b" : "transparent",
               color: cv.tool === t.id ? "#111" : "#94a3b8",
-              cursor: "pointer",
-              fontSize: "17px",
+              cursor: "pointer", fontSize: "17px",
               display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all .15s",
-              flexShrink: 0,
+              transition: "all .15s", flexShrink: 0,
             }}
           >
             {t.icon}
@@ -109,21 +97,15 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
 
         <div style={{ width: "1px", height: "26px", background: "#334155", margin: "0 2px" }} />
 
-        {/* Painel Popup de Configuração de Cor e Tamanho do Pincel */}
+        {/* 🎨 Painel Popup DE COR (Sempre visível) */}
         <div ref={colorPopRef} style={{ position: "relative" }}>
           <button
-            title="Cor e Tamanho do Traço"
-            onClick={() => setShowColorPop(v => !v)}
+            title="Cor do Traço"
+            onClick={() => { setShowColorPop(v => !v); setShowSizePop(false); }}
             style={{
-              width: "40px", height: "40px",
-              borderRadius: "11px",
-              border: "none",
-              background: showColorPop ? "#374151" : "transparent",
-              color: "#94a3b8",
-              cursor: "pointer",
-              fontSize: "17px",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0,
+              width: "40px", height: "40px", borderRadius: "11px", border: "none",
+              background: showColorPop ? "#374151" : "transparent", color: "#94a3b8",
+              cursor: "pointer", fontSize: "17px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             }}
           >
             🎨
@@ -131,54 +113,65 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
 
           {showColorPop && (
             <div style={{
-              position: "absolute",
-              bottom: "calc(100% + 8px)",
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "#1e293b",
-              border: "1px solid #334155",
-              borderRadius: "12px",
-              padding: "10px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-              zIndex: 30,
-              boxShadow: "0 4px 20px rgba(0,0,0,.6)",
-              minWidth: "210px",
+              position: "absolute", bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
+              background: "#1e293b", border: "1px solid #334155", borderRadius: "12px",
+              padding: "10px", display: "flex", gap: "5px", justifyContent: "center",
+              zIndex: 30, boxShadow: "0 4px 20px rgba(0,0,0,.6)", minWidth: "160px",
             }}>
-              {/* Seleção de Cores da Paleta */}
-              <div style={{ display: "flex", gap: "5px", justifyContent: "center" }}>
-                {PAL.map(cor => (
-                  <button
-                    key={cor}
-                    onClick={() => { cv.setColor(cor); cv.setTool("pen"); }}
-                    style={{
-                      width: "24px", height: "24px",
-                      background: cor,
-                      border: cv.color === cor ? "2.5px solid #fff" : "2px solid #374151",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
-                  />
-                ))}
-              </div>
-              {/* Ajuste do Slider de Tamanho do Traço */}
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", borderTop: "1px solid #334155", paddingTop: "8px" }}>
+              {PAL.map(cor => (
+                <button
+                  key={cor}
+                  onClick={() => { cv.setColor(cor); cv.setTool("pen"); setShowColorPop(false); }} 
+                  style={{
+                    width: "24px", height: "24px", background: cor,
+                    border: cv.color === cor ? "2.5px solid #fff" : "2px solid #374151",
+                    borderRadius: "50%", cursor: "pointer", flexShrink: 0,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 📏 Painel Popup APENAS DE TAMANHO (Aparece para Caneta e Borracha) */}
+        {(cv.tool === "pen" || cv.tool === "eraser") && (
+          <div ref={sizePopRef} style={{ position: "relative" }}>
+            <button
+              title="Tamanho do Traço"
+              onClick={() => { setShowSizePop(v => !v); setShowColorPop(false); }}
+              style={{
+                width: "40px", height: "40px", borderRadius: "11px", border: "none",
+                background: showSizePop ? "#374151" : "transparent", color: "#94a3b8",
+                cursor: "pointer", fontSize: "17px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              }}
+            >
+              📏
+            </button>
+
+            {showSizePop && (
+              <div style={{
+                position: "absolute", bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
+                background: "#1e293b", border: "1px solid #334155", borderRadius: "12px",
+                padding: "10px", display: "flex", alignItems: "center", gap: "8px",
+                zIndex: 30, boxShadow: "0 4px 20px rgba(0,0,0,.6)", minWidth: "150px",
+              }}>
                 <span style={{ fontSize: "10px", color: "#64748b", fontWeight: "bold", whiteSpace: "nowrap" }}>TAM</span>
                 <input
-                  type="range" min="2" max="50" value={cv.brush}
+                  type="range" min="2" max="30" value={cv.brush}
                   onChange={e => cv.setBrush(+e.target.value)}
                   style={{ flex: 1, cursor: "pointer" }}
                 />
                 <span style={{ fontSize: "11px", color: "#94a3b8", minWidth: "18px", textAlign: "center" }}>{cv.brush}</span>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        <div style={{ width: "1px", height: "26px", background: "#334155", margin: "0 2px" }} />
-        
+        {(cv.tool === "pen" || cv.tool === "eraser") && (
+          <div style={{ width: "1px", height: "26px", background: "#334155", margin: "0 2px" }} />
+        )}
+
+        {/* Botão do Grid Tático */}
         <button 
           title="Alternar Grade Tática (Grid)" 
           onClick={() => cv.setShowGrid(!cv.showGrid)} 
@@ -201,20 +194,10 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
       {/* ── PAINEL FLUTUANTE DE SELEÇÃO ATIVA (Aparece logo acima da Dock) ── */}
       {hasSelection && (
         <div style={{
-          position: "absolute",
-          bottom: "74px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "#1e293b",
-          border: "1px solid #334155",
-          borderRadius: "12px",
-          padding: "6px 10px",
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          zIndex: 25,
-          boxShadow: "0 4px 20px rgba(0,0,0,.55)",
-          whiteSpace: "nowrap",
+          position: "absolute", bottom: "74px", left: "50%", transform: "translateX(-50%)",
+          background: "#1e293b", border: "1px solid #334155", borderRadius: "12px",
+          padding: "6px 10px", display: "flex", alignItems: "center", gap: "6px",
+          zIndex: 25, boxShadow: "0 4px 20px rgba(0,0,0,.55)", whiteSpace: "nowrap",
         }}>
           <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "bold", paddingRight: "4px", borderRight: "1px solid #334155", marginRight: "4px" }}>
             {cv.selImg.length} SEL
