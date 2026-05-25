@@ -21,6 +21,8 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const [images, setImages] = useState<ImageObj[]>([]);
   const [selImg, setSelImg] = useState<string[]>([]);
   const [selBox, setSelBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [showGrid, setShowGrid] = useState(false);
+  const showGridRef = useRef(false);
  
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -81,6 +83,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   useLayoutEffect(() => { selImgRef.current = selImg; }, [selImg]);
   useLayoutEffect(() => { toolRef.current = tool; }, [tool]);
   useLayoutEffect(() => { selBoxRef.current = selBox; }, [selBox]); 
+  useLayoutEffect(() => { showGridRef.current = showGrid; }, [showGrid]);
   useEffect(() => {
     const idsAtuais = new Set(images.map(i => i.id));
     for (const id of imageCache.current.keys()) {
@@ -219,6 +222,27 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         bgCtx.drawImage(el, img.x, img.y, img.w, img.h);
       }
     });
+    if (showGridRef.current) {
+      bgCtx.save();
+      bgCtx.strokeStyle = "rgba(255, 255, 255, 0.15)"; // Uma linha branca sutil
+      bgCtx.lineWidth = 1;
+      
+      const gridSize = 100; // Tamanho do quadrado (100x100 pixels)
+
+      bgCtx.beginPath();
+      // Desenha as linhas verticais
+      for (let x = 0; x <= MUNDO_W; x += gridSize) {
+        bgCtx.moveTo(x, 0);
+        bgCtx.lineTo(x, MUNDO_H);
+      }
+      // Desenha as linhas horizontais
+      for (let y = 0; y <= MUNDO_H; y += gridSize) {
+        bgCtx.moveTo(0, y);
+        bgCtx.lineTo(MUNDO_W, y);
+      }
+      bgCtx.stroke();
+      bgCtx.restore();
+    }
  
     // 2. CAMADA DO MEIO (DESENHOS)
     drawCtx.lineCap = "round";
@@ -362,7 +386,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
  
   useEffect(() => {
     renderizarTelaCompleta();
-  }, [linhas, images, zoom, panX, panY, selBox, renderizarTelaCompleta]);
+  }, [linhas, images, zoom, panX, panY, selBox, showGrid, renderizarTelaCompleta]);
  
   useEffect(() => {
     if (!isMestre && tab === "tela") {
@@ -727,7 +751,8 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     tool, setTool, color, setColor, brush, setBrush,
     linhas, setLinhas, images, setImages, selImg, setSelImg, selBox,
     bgRef, drawRef, fgRef, contRef, fileRef, clearCv, loadImg, onDown, onMove, onUp,
-    zoom, panX, panY 
+    zoom, panX, panY,
+    showGrid, setShowGrid 
   };
 }
  

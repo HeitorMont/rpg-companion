@@ -178,6 +178,18 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
         </div>
 
         <div style={{ width: "1px", height: "26px", background: "#334155", margin: "0 2px" }} />
+        
+        <button 
+          title="Alternar Grade Tática (Grid)" 
+          onClick={() => cv.setShowGrid(!cv.showGrid)} 
+          style={{ 
+            ...dockActionBtnStyle, 
+            background: cv.showGrid ? "#3b82f6" : "transparent",
+            color: cv.showGrid ? "#ffffff" : "#94a3b8" 
+          }}
+        >
+          ▦
+        </button>
 
         {/* Adicionar Imagem e Limpar Tela */}
         <button title="Inserir Imagem/Token" onClick={() => cv.fileRef.current?.click()} style={dockActionBtnStyle}>🖼️</button>
