@@ -167,7 +167,7 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
               <div style={{ display: "flex", alignItems: "center", gap: "8px", borderTop: "1px solid #334155", paddingTop: "8px" }}>
                 <span style={{ fontSize: "10px", color: "#64748b", fontWeight: "bold", whiteSpace: "nowrap" }}>TAM</span>
                 <input
-                  type="range" min="2" max="30" value={cv.brush}
+                  type="range" min="2" max="50" value={cv.brush}
                   onChange={e => cv.setBrush(+e.target.value)}
                   style={{ flex: 1, cursor: "pointer" }}
                 />
