@@ -8,14 +8,12 @@ const mkId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const MUNDO_W = 2000;
 const MUNDO_H = 2000;
  
-// Tamanho visual da alça de redimensionamento em pixels de tela
+// Tamanho visual da alça de redimensionamento em pixels de ecrã
 const HANDLE_VISUAL_PX = 10;
-// Área de colisão da alça (maior para facilitar o toque no celular)
 const HANDLE_HIT_PX = 22;
 
 const TEMPO_PING = 4000;
 
-// 📍 Tipo do Ping
 type PingObj = { id: string; x: number; y: number; color: string; ts: number };
  
 export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
@@ -29,14 +27,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const [showGrid, setShowGrid] = useState(false);
   const showGridRef = useRef(false);
 
-  // 📍 Estado do Ping
   const [pings, setPings] = useState<PingObj[]>([]);
  
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
  
-  // 🔮 As 3 Camadas Físicas
   const bgRef = useRef<HTMLCanvasElement | null>(null);
   const drawRef = useRef<HTMLCanvasElement | null>(null);
   const fgRef = useRef<HTMLCanvasElement | null>(null);
@@ -48,7 +44,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const panning = useRef(false);
   const movingTokens = useRef(false);
  
-  // 🔮 Novo ref para rastrear o redimensionamento ativo
   const resizingImg = useRef<{
     id: string;
     startMouseX: number;
@@ -57,7 +52,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     startH: number;
   } | null>(null);
 
-  // 📍 Refs do Sistema de Ping (Anti-spam)
   const lastPingTs = useRef<number>(0);
   const pingsRef = useRef<PingObj[]>([]);
  
@@ -96,7 +90,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   useLayoutEffect(() => { toolRef.current = tool; }, [tool]);
   useLayoutEffect(() => { selBoxRef.current = selBox; }, [selBox]); 
   useLayoutEffect(() => { showGridRef.current = showGrid; }, [showGrid]);
-  useLayoutEffect(() => { pingsRef.current = pings; }, [pings]); // 📍 Sync do Ping
+  useLayoutEffect(() => { pingsRef.current = pings; }, [pings]);
 
   useEffect(() => {
     const idsAtuais = new Set(images.map(i => i.id));
@@ -107,8 +101,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     }
   }, [images]);
 
-  // 🔮 Garante que jogadores/espectadores sempre usem a ferramenta de arrastar,
-  // inclusive quando o papel é trocado dinamicamente dentro da sessão.
   useEffect(() => {
     if (!isMestre) {
       setTool("pan");
@@ -181,7 +173,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     };
   }, [images, linhas, isMestre, lobbyId]);
  
-  // 📍 FUNÇÃO DE DISPARO DO PING
   const dispararPing = useCallback((px: number, py: number, cor: string) => {
     const newPing = { id: mkId(), x: px, y: py, color: cor, ts: Date.now() };
     setPings(prev => [...prev, newPing]);
@@ -191,7 +182,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     }
   }, []);
 
-  // 🔮 Verifica se um ponto (mundo) está sobre a alça de resize de uma imagem
   const isOverResizeHandle = useCallback((px: number, py: number, img: ImageObj): boolean => {
     const hs = HANDLE_HIT_PX / zoomRef.current;
     return (
@@ -230,7 +220,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       ctx.clip();
     });
  
-    // 1. CAMADA DE FUNDO
     bgCtx.fillStyle = "#111827";
     bgCtx.fillRect(0, 0, MUNDO_W, MUNDO_H);
  
@@ -246,20 +235,17 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         bgCtx.drawImage(el, img.x, img.y, img.w, img.h);
       }
     });
+
     if (showGridRef.current) {
       bgCtx.save();
-      bgCtx.strokeStyle = "rgba(255, 255, 255, 0.15)"; // Uma linha branca sutil
+      bgCtx.strokeStyle = "rgba(255, 255, 255, 0.15)";
       bgCtx.lineWidth = 1;
-      
-      const gridSize = 100; // Tamanho do quadrado (100x100 pixels)
-
+      const gridSize = 100;
       bgCtx.beginPath();
-      // Desenha as linhas verticais
       for (let x = 0; x <= MUNDO_W; x += gridSize) {
         bgCtx.moveTo(x, 0);
         bgCtx.lineTo(x, MUNDO_H);
       }
-      // Desenha as linhas horizontais
       for (let y = 0; y <= MUNDO_H; y += gridSize) {
         bgCtx.moveTo(0, y);
         bgCtx.lineTo(MUNDO_W, y);
@@ -268,7 +254,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       bgCtx.restore();
     }
  
-    // 2. CAMADA DO MEIO (DESENHOS)
     drawCtx.lineCap = "round";
     drawCtx.lineJoin = "round";
     
@@ -295,7 +280,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       drawCtx.stroke();
     });
  
-    // 3. CAMADA DA FRENTE (TOKENS)
     imagesRef.current.filter(img => img.layer !== "map").forEach(img => {
       let el = imageCache.current.get(img.id);
       if (!el) {
@@ -309,48 +293,33 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       }
     });
 
-    // 📍 RENDERIZAÇÃO DO PING (Gota Invertida / Pino de Mapa)
     const agora = Date.now();
     pingsRef.current.forEach(ping => {
       const idade = agora - ping.ts;
-      
       if (idade < TEMPO_PING) { 
         fgCtx.save();
-        
-        // Efeito de "Queda" (Drop) rápido nos primeiros 150ms
         let yOffset = 0;
-        if (idade < 150) {
-          yOffset = -20 * (1 - (idade / 150));
-        }
-
-        // Efeito de Fade out suave nos últimos 200ms
+        if (idade < 150) yOffset = -20 * (1 - (idade / 150));
         let alpha = 1;
-        if (idade > TEMPO_PING - 200) {
-          alpha = Math.max(0, (TEMPO_PING - idade) / 200);
-        }
+        if (idade > TEMPO_PING - 200) alpha = Math.max(0, (TEMPO_PING - idade) / 200);
         fgCtx.globalAlpha = alpha;
         
         const px = ping.x;
         const py = ping.y + yOffset;
-        const r = 16 / zoomRef.current; // Tamanho da cabeça do pino
-        const cy = py - r * 1.5; // Centro da parte redonda
+        const r = 16 / zoomRef.current;
+        const cy = py - r * 1.5;
         
-        // 1. Desenha o formato de Gota Invertida
         fgCtx.beginPath();
-        // Desenha a parte redonda superior de forma exata
         fgCtx.arc(px, cy, r, Math.PI * 0.15, Math.PI * 0.85, true);
-        // Desce uma linha reta até a ponta (onde o clique aconteceu)
         fgCtx.lineTo(px, py);
         fgCtx.closePath();
         
-        // Cor e Sombra (Dá a sensação de profundidade no mapa)
         fgCtx.shadowColor = "rgba(0,0,0,0.5)";
         fgCtx.shadowBlur = 6 / zoomRef.current;
         fgCtx.shadowOffsetY = 3 / zoomRef.current;
         fgCtx.fillStyle = ping.color;
         fgCtx.fill();
         
-        // 2. Acabamento: Borda branca e Furo no meio (Visual clássico de marcador)
         fgCtx.shadowColor = "transparent"; 
         fgCtx.lineWidth = 2.5 / zoomRef.current;
         fgCtx.strokeStyle = "#ffffff";
@@ -360,12 +329,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         fgCtx.arc(px, cy, r * 0.35, 0, Math.PI * 2);
         fgCtx.fillStyle = "#ffffff";
         fgCtx.fill();
-        
         fgCtx.restore();
       }
     });
  
-    // 4. SELEÇÃO: bordas, badges e alças de redimensionamento
     if (isMestre && toolRef.current === "select") {
       imagesRef.current.forEach(img => {
         if (selImgRef.current.includes(img.id)) {
@@ -373,12 +340,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
           const corCamada = isMap ? "#f59e0b" : "#3b82f6";
           const textoLabel = isMap ? "🗺️ Fundo" : "♟️ Frente";
  
-          // Borda de seleção
           fgCtx.strokeStyle = corCamada;
           fgCtx.lineWidth = 3 / zoomRef.current;
           fgCtx.strokeRect(img.x, img.y, img.w, img.h);
  
-          // Badge de camada
           fgCtx.save();
           fgCtx.fillStyle = corCamada;
           const fontSize = 11 / zoomRef.current;
@@ -394,32 +359,26 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
           fgCtx.fillText(textoLabel, badgeX + (6 / zoomRef.current), badgeY + (badgeH / 2));
           fgCtx.restore();
  
-          // 🔮 ALÇA DE REDIMENSIONAMENTO — canto inferior direito
-          const hv = HANDLE_VISUAL_PX / zoomRef.current; // tamanho visual em coords do mundo
+          const hv = HANDLE_VISUAL_PX / zoomRef.current;
           const handleX = img.x + img.w - hv;
           const handleY = img.y + img.h - hv;
  
-          // Sombra sutil para destacar
           fgCtx.save();
           fgCtx.shadowColor = "rgba(0,0,0,0.5)";
           fgCtx.shadowBlur = 4 / zoomRef.current;
  
-          // Fundo branco da alça
           fgCtx.fillStyle = "#ffffff";
           fgCtx.fillRect(handleX, handleY, hv * 2, hv * 2);
  
-          // Borda colorida da alça
           fgCtx.strokeStyle = corCamada;
           fgCtx.lineWidth = 2 / zoomRef.current;
           fgCtx.strokeRect(handleX, handleY, hv * 2, hv * 2);
  
-          // Setas diagonais dentro da alça (ícone de resize)
           fgCtx.fillStyle = corCamada;
           const arrowSize = hv * 0.9;
-          const cx = handleX + hv; // centro da alça
+          const cx = handleX + hv;
           const cy = handleY + hv;
  
-          // Triângulo sudeste (↘)
           fgCtx.beginPath();
           fgCtx.moveTo(cx + arrowSize * 0.15, cy + arrowSize * 0.15);
           fgCtx.lineTo(cx + arrowSize, cy + arrowSize * 0.15);
@@ -429,12 +388,11 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
  
           fgCtx.restore();
  
-          // 🔮 Alças nos outros 3 cantos (visual apenas, pequenos quadrados)
           const smallH = (HANDLE_VISUAL_PX * 0.65) / zoomRef.current;
           const corners = [
-            { x: img.x - smallH,             y: img.y - smallH },              // topo-esq
-            { x: img.x + img.w - smallH,      y: img.y - smallH },              // topo-dir
-            { x: img.x - smallH,             y: img.y + img.h - smallH },       // baixo-esq
+            { x: img.x - smallH,             y: img.y - smallH },
+            { x: img.x + img.w - smallH,      y: img.y - smallH },
+            { x: img.x - smallH,             y: img.y + img.h - smallH },
           ];
           corners.forEach(corner => {
             fgCtx.fillStyle = "#ffffff";
@@ -447,12 +405,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       });
     }
  
-    // Moldura do tabuleiro
     fgCtx.strokeStyle = "#1f2937";
     fgCtx.lineWidth = 4 / zoomRef.current;
     fgCtx.strokeRect(0, 0, MUNDO_W, MUNDO_H);
  
-    // Caixa de seleção múltipla
     if (isMestre && toolRef.current === "select" && selBoxRef.current) {
       fgCtx.strokeStyle = "rgba(59, 130, 246, 0.8)";
       fgCtx.lineWidth = 1.5 / zoomRef.current;
@@ -468,7 +424,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     renderizarTelaCompleta();
   }, [linhas, images, zoom, panX, panY, selBox, showGrid, renderizarTelaCompleta]);
 
-  // 📍 LOOP DE ANIMAÇÃO EXCLUSIVO PARA O PING
   useEffect(() => {
     if (pings.length > 0) {
       let animationFrame: number;
@@ -476,11 +431,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         renderizarTelaCompleta();
         const agora = Date.now();
         
-        // Se algum pino ainda estiver vivo, continua renderizando
         if (pingsRef.current.some(p => agora - p.ts < TEMPO_PING)) {
           animationFrame = requestAnimationFrame(renderLoop);
         } else {
-          setPings([]); // Auto-limpeza quando todos os pinos expirarem
+          setPings([]);
         }
       };
       animationFrame = requestAnimationFrame(renderLoop);
@@ -511,7 +465,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       });
     }
 
-    // 📍 Recebendo o Ping com Segurança de Tempo (Anti-Desincronização)
     canal.on("broadcast", { event: "canvas_ping" }, (payload) => {
       const pingSeguro = { ...payload.payload, ts: Date.now() };
       setPings(prev => [...prev, pingSeguro]);
@@ -585,14 +538,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     const p = obterPosicaoMundo(e);
     lastP.current = { x: p.x, y: p.y };
 
-    // 🛡️ O FEITIÇO DO PING DE 1 CLIQUE (IMEDIATO) E COM ANTI-SPAM
     if (tool === "ping") {
       const agora = Date.now();
-      // O jogador só pode invocar um ping a cada 4 segundos!
       if (agora - lastPingTs.current < TEMPO_PING) return; 
       lastPingTs.current = agora;
       dispararPing(p.x, p.y, color);
-      return; // Interrompe para não fazer mais nada
+      return; 
     }
  
     if (tool === "pan" || e.button === 1) {
@@ -604,7 +555,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     if (!isMestre) return;
  
     if (tool === "select") {
-      // 🔮 1. Verifica se o clique é sobre a alça de redimensionamento (tem prioridade!)
       for (const img of [...imagesRef.current].reverse()) {
         if (selImgRef.current.includes(img.id) && isOverResizeHandle(p.x, p.y, img)) {
           resizingImg.current = {
@@ -614,11 +564,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
             startW: img.w,
             startH: img.h,
           };
-          return; // Capturou o resize, interrompe aqui
+          return; 
         }
       }
  
-      // 2. Verifica se clicou em algum token (comportamento original)
       const tokenClicado = [...imagesRef.current].reverse().find(img =>
         p.x >= img.x && p.x <= img.x + img.w && p.y >= img.y && p.y <= img.y + img.h
       );
@@ -706,14 +655,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     if (!isMestre) return;
  
     if (tool === "select") {
-      // 🔮 Redimensionamento ativo
       if (resizingImg.current) {
         const { id, startMouseX, startMouseY, startW, startH } = resizingImg.current;
         const dx = p.x - startMouseX;
         const dy = p.y - startMouseY;
         setImages(prev => prev.map(img => {
           if (img.id !== id) return img;
-          // Mínimo de 20px, máximo limitado pelas bordas do mundo
           const newW = Math.max(20, Math.min(startW + dx, MUNDO_W - img.x));
           const newH = Math.max(20, Math.min(startH + dy, MUNDO_H - img.y));
           return { ...img, w: Math.round(newW), h: Math.round(newH) };
@@ -790,10 +737,8 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       lastTouchCenter.current = null;
     }
  
-    // 🔮 Finaliza o redimensionamento
     if (resizingImg.current) {
       resizingImg.current = null;
-      // Não precisa de mais nenhuma ação — o setImages já foi aplicado no onMove
     }
  
     panning.current = false;
@@ -822,47 +767,80 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     try { await supabase.from("canvas_state").upsert({ lobby_id: lobbyId, drawings: [], images: [], composite_url: "", ts: Date.now() }); } catch {}
   };
  
-  const loadImg = (e: any) => {
-    const f = e.target.files[0]; if (!f) return;
-    const fr = new FileReader();
-    fr.onload = (ev: any) => {
-      const dataUrl = ev.target.result;
-      const el = new Image();
-      el.onload = () => {
-        const w = Math.min(el.width, 500), h = Math.min(el.height, 500);
-        const x = Math.round((MUNDO_W - w) / 2), y = Math.round((MUNDO_H - h) / 2);
-        const id = mkId();
-        setImages(p => [...p, { id, dataUrl, x, y, w, h, layer: "token" }]);
+  // 🔮 MAGIA NOVA: Upload direto para o Supabase Storage ao carregar via botão
+  const loadImg = async (e: any) => {
+    const f = e.target.files[0]; 
+    if (!f) return;
+    e.target.value = ""; 
+
+    // Cria um URL provisório só para ler o tamanho natural da imagem
+    const tempUrl = URL.createObjectURL(f);
+    const el = new Image();
+    
+    el.onload = async () => {
+      const w = Math.min(el.width, 500), h = Math.min(el.height, 500);
+      const x = Math.round((MUNDO_W - w) / 2), y = Math.round((MUNDO_H - h) / 2);
+      const id = mkId();
+      
+      const fileExt = f.name.split('.').pop() || "png";
+      const filePath = `${lobbyId}/${id}.${fileExt}`;
+
+      try {
+        const { error } = await supabase.storage.from("canvas_images").upload(filePath, f);
+        if (error) throw error;
+
+        const { data } = supabase.storage.from("canvas_images").getPublicUrl(filePath);
+        
+        setImages(p => [...p, { id, dataUrl: data.publicUrl, x, y, w, h, layer: "token" }]);
         setTool("select"); setSelImg([id]);
-      };
-      el.src = dataUrl;
+      } catch (err) {
+        console.error("Falha ao subir a imagem para o Supabase Storage:", err);
+        alert("A magia falhou! A imagem não pôde ser enviada para a mesa.");
+      } finally {
+        URL.revokeObjectURL(tempUrl);
+      }
     };
-    fr.readAsDataURL(f); e.target.value = "";
+    el.src = tempUrl;
   };
  
+  // 🔮 MAGIA NOVA: Upload direto para o Supabase Storage ao colar (Ctrl+V)
   useEffect(() => {
     if (!isMestre) return;
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items; if (!items) return;
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf("image") !== -1) {
           const blob = items[i].getAsFile(); if (!blob) continue;
-          const reader = new FileReader();
-          reader.onload = (event: any) => {
-            const img = new Image();
-            img.onload = () => {
-              const novaImagem: ImageObj = { id: mkId(), x: 100, y: 100, w: Math.min(img.width, 300), h: Math.min(img.height, 300), dataUrl: event.target.result, layer: "token" };
-              setImages(prev => [...prev, novaImagem]);
-            };
-            img.src = event.target.result;
+          
+          const tempUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          
+          img.onload = async () => {
+            const w = Math.min(img.width, 300), h = Math.min(img.height, 300);
+            const x = 100, y = 100;
+            const id = mkId();
+            const filePath = `${lobbyId}/${id}.png`;
+            
+            try {
+              const { error } = await supabase.storage.from("canvas_images").upload(filePath, blob);
+              if (error) throw error;
+              
+              const { data } = supabase.storage.from("canvas_images").getPublicUrl(filePath);
+              setImages(prev => [...prev, { id, x, y, w, h, dataUrl: data.publicUrl, layer: "token" }]);
+            } catch (err) {
+              console.error("Falha ao colar e enviar imagem:", err);
+            } finally {
+              URL.revokeObjectURL(tempUrl);
+            }
           };
-          reader.readAsDataURL(blob); break;
+          img.src = tempUrl;
+          break;
         }
       }
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [isMestre]);
+  }, [isMestre, lobbyId]);
  
   return {
     tool, setTool, color, setColor, brush, setBrush,
