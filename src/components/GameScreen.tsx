@@ -17,7 +17,7 @@ interface CanvasToolbarProps {
 
 function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
   const [showColorPop, setShowColorPop] = useState(false);
-  const [showSizePop, setShowSizePop] = useState(false); // 🔮 Nova memória para o menu de Tamanho
+  const [showSizePop, setShowSizePop] = useState(false); // 🔮 Memória para o menu de Tamanho
   const colorPopRef = useRef<HTMLDivElement>(null);
   const sizePopRef = useRef<HTMLDivElement>(null);
 
@@ -35,27 +35,16 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // 🛡️ ESCUDO DO JOGADOR/ESPECTADOR
-  if (!isMestre) {
-    return (
-      <div style={{
-        position: "absolute", bottom: "14px", left: "50%", transform: "translateX(-50%)",
-        background: "#1e293b", border: "1px solid #334155", borderRadius: "12px",
-        padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px",
-        zIndex: 20, boxShadow: "0 4px 24px rgba(0,0,0,.55)", whiteSpace: "nowrap"
-      }}>
-        <div style={{ width: "8px", height: "8px", background: "#22c55e", borderRadius: "50%" }} />
-        <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "bold" }}>🖐️ Navegação Livre (Arrastar / Zoom)</span>
-      </div>
-    );
-  }
-
-  // 👑 CONFIGURAÇÃO DO MESTRE
-  const tools = [
+  // 🛡️ LISTA INTELIGENTE: Mestre vê tudo, Jogador vê apenas Arrastar e Ping
+  const tools = isMestre ? [
     { id: "pan", icon: "✋", label: "Arrastar" },
     { id: "select", icon: "🖱️", label: "Selecionar" },
     { id: "pen", icon: "✏️", label: "Caneta" },
-    { id: "eraser", icon: "⬜", label: "Borracha" }
+    { id: "eraser", icon: "⬜", label: "Borracha" },
+    { id: "ping", icon: "📍", label: "Sinalizar (Ping)" }
+  ] : [
+    { id: "pan", icon: "✋", label: "Arrastar Mapa" },
+    { id: "ping", icon: "📍", label: "Sinalizar (Ping)" }
   ];
 
   const hasSelection = cv.selImg.length > 0;
@@ -78,7 +67,6 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
             onClick={() => { 
               cv.setTool(t.id); 
               if (t.id !== "select") cv.setSelImg([]); 
-              // Fecha todos os menus extras ao trocar de ferramenta
               setShowColorPop(false); 
               setShowSizePop(false); 
             }}
@@ -97,10 +85,10 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
 
         <div style={{ width: "1px", height: "26px", background: "#334155", margin: "0 2px" }} />
 
-        {/* 🎨 Painel Popup DE COR (Sempre visível) */}
+        {/* 🎨 Painel Popup DE COR (Sempre visível para Mestre e Jogadores) */}
         <div ref={colorPopRef} style={{ position: "relative" }}>
           <button
-            title="Cor do Traço"
+            title="Cor do Traço / Ping"
             onClick={() => { setShowColorPop(v => !v); setShowSizePop(false); }}
             style={{
               width: "40px", height: "40px", borderRadius: "11px", border: "none",
@@ -121,7 +109,13 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
               {PAL.map(cor => (
                 <button
                   key={cor}
-                  onClick={() => { cv.setColor(cor); cv.setTool("pen"); setShowColorPop(false); }} 
+                  onClick={() => { 
+                    cv.setColor(cor); 
+                    // Se o Mestre não estiver no Ping, vai pra Caneta. Se o Jogador não estiver no Ping, vai pro Ping.
+                    if (isMestre && cv.tool !== "ping") cv.setTool("pen"); 
+                    if (!isMestre && cv.tool !== "ping") cv.setTool("ping");
+                    setShowColorPop(false); 
+                  }} 
                   style={{
                     width: "24px", height: "24px", background: cor,
                     border: cv.color === cor ? "2.5px solid #fff" : "2px solid #374151",
@@ -133,8 +127,8 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
           )}
         </div>
 
-        {/* 📏 Painel Popup APENAS DE TAMANHO (Aparece para Caneta e Borracha) */}
-        {(cv.tool === "pen" || cv.tool === "eraser") && (
+        {/* 📏 Painel Popup APENAS DE TAMANHO (Exclusivo do Mestre, para Caneta e Borracha) */}
+        {isMestre && (cv.tool === "pen" || cv.tool === "eraser") && (
           <div ref={sizePopRef} style={{ position: "relative" }}>
             <button
               title="Tamanho do Traço"
@@ -167,32 +161,33 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
           </div>
         )}
 
-        {(cv.tool === "pen" || cv.tool === "eraser") && (
+        {isMestre && (cv.tool === "pen" || cv.tool === "eraser") && (
           <div style={{ width: "1px", height: "26px", background: "#334155", margin: "0 2px" }} />
         )}
 
-        {/* Botão do Grid Tático */}
-        <button 
-          title="Alternar Grade Tática (Grid)" 
-          onClick={() => cv.setShowGrid(!cv.showGrid)} 
-          style={{ 
-            ...dockActionBtnStyle, 
-            background: cv.showGrid ? "#3b82f6" : "transparent",
-            color: cv.showGrid ? "#ffffff" : "#94a3b8" 
-          }}
-        >
-          ▦
-        </button>
-
-        {/* Adicionar Imagem e Limpar Tela */}
-        <button title="Inserir Imagem/Token" onClick={() => cv.fileRef.current?.click()} style={dockActionBtnStyle}>🖼️</button>
-        <button title="Limpar Todo o Canvas" onClick={cv.clearCv} style={{ ...dockActionBtnStyle, color: "#ef4444" }}>🗑️</button>
-
-        <input ref={cv.fileRef as any} type="file" accept="image/*" style={{ display: "none" }} onChange={cv.loadImg} />
+        {/* 🛠️ AÇÕES EXTRAS EXCLUSIVAS DO MESTRE (Grid, Adicionar Imagem, Limpar Tela) */}
+        {isMestre && (
+          <>
+            <button 
+              title="Alternar Grade Tática (Grid)" 
+              onClick={() => cv.setShowGrid(!cv.showGrid)} 
+              style={{ 
+                ...dockActionBtnStyle, 
+                background: cv.showGrid ? "#3b82f6" : "transparent",
+                color: cv.showGrid ? "#ffffff" : "#94a3b8" 
+              }}
+            >
+              ▦
+            </button>
+            <button title="Inserir Imagem/Token" onClick={() => cv.fileRef.current?.click()} style={dockActionBtnStyle}>🖼️</button>
+            <button title="Limpar Todo o Canvas" onClick={cv.clearCv} style={{ ...dockActionBtnStyle, color: "#ef4444" }}>🗑️</button>
+            <input ref={cv.fileRef as any} type="file" accept="image/*" style={{ display: "none" }} onChange={cv.loadImg} />
+          </>
+        )}
       </div>
 
-      {/* ── PAINEL FLUTUANTE DE SELEÇÃO ATIVA (Aparece logo acima da Dock) ── */}
-      {hasSelection && (
+      {/* ── PAINEL FLUTUANTE DE SELEÇÃO ATIVA (Exclusivo do Mestre) ── */}
+      {isMestre && hasSelection && (
         <div style={{
           position: "absolute", bottom: "74px", left: "50%", transform: "translateX(-50%)",
           background: "#1e293b", border: "1px solid #334155", borderRadius: "12px",
