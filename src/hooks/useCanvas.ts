@@ -12,6 +12,9 @@ const MUNDO_H = 2000;
 const HANDLE_VISUAL_PX = 10;
 // Área de colisão da alça (maior para facilitar o toque no celular)
 const HANDLE_HIT_PX = 22;
+
+// 📍 Tipo do Ping
+type PingObj = { id: string; x: number; y: number; color: string; ts: number };
  
 export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const [tool, setTool] = useState(isMestre ? "pen" : "pan"); 
@@ -23,6 +26,9 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const [selBox, setSelBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [showGrid, setShowGrid] = useState(false);
   const showGridRef = useRef(false);
+
+  // 📍 Estado do Ping
+  const [pings, setPings] = useState<PingObj[]>([]);
  
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -48,6 +54,11 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     startW: number;
     startH: number;
   } | null>(null);
+
+  // 📍 Refs do Sistema de Ping
+  const pingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingStartP = useRef<{ x: number, y: number } | null>(null);
+  const pingsRef = useRef<PingObj[]>([]);
  
   const zoomRef = useRef(1);
   const panXRef = useRef(0);
@@ -84,6 +95,8 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   useLayoutEffect(() => { toolRef.current = tool; }, [tool]);
   useLayoutEffect(() => { selBoxRef.current = selBox; }, [selBox]); 
   useLayoutEffect(() => { showGridRef.current = showGrid; }, [showGrid]);
+  useLayoutEffect(() => { pingsRef.current = pings; }, [pings]); // 📍 Sync do Ping
+
   useEffect(() => {
     const idsAtuais = new Set(images.map(i => i.id));
     for (const id of imageCache.current.keys()) {
@@ -167,6 +180,16 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     };
   }, [images, linhas, isMestre, lobbyId]);
  
+  // 📍 FUNÇÃO DE DISPARO DO PING
+  const dispararPing = useCallback((px: number, py: number, cor: string) => {
+    const newPing = { id: mkId(), x: px, y: py, color: cor, ts: Date.now() };
+    setPings(prev => [...prev, newPing]);
+    
+    if (broadcastRef.current) {
+      broadcastRef.current.send({ type: "broadcast", event: "canvas_ping", payload: newPing });
+    }
+  }, []);
+
   // 🔮 Verifica se um ponto (mundo) está sobre a alça de resize de uma imagem
   const isOverResizeHandle = useCallback((px: number, py: number, img: ImageObj): boolean => {
     const hs = HANDLE_HIT_PX / zoomRef.current;
@@ -284,6 +307,34 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         fgCtx.drawImage(el, img.x, img.y, img.w, img.h);
       }
     });
+
+    // 📍 RENDERIZAÇÃO DO PING ANIMADO
+    const agora = Date.now();
+    pingsRef.current.forEach(ping => {
+      const idade = agora - ping.ts;
+      if (idade < 2000) { 
+        const progress = idade / 2000;
+        fgCtx.save();
+        
+        // Círculo interno pulsante (Seguro)
+        fgCtx.beginPath();
+        const radius = Math.max(0.1, (12 / zoomRef.current) + (Math.sin(progress * Math.PI * 10) * 4 / zoomRef.current));
+        fgCtx.arc(ping.x, ping.y, radius, 0, Math.PI * 2);
+        fgCtx.fillStyle = ping.color;
+        fgCtx.globalAlpha = Math.max(0, 1 - Math.pow(progress, 3)); 
+        fgCtx.fill();
+        
+        // Anel (onda sonora) em expansão (Seguro)
+        fgCtx.beginPath();
+        const outerRadius = Math.max(0.1, (10 + progress * 80) / zoomRef.current);
+        fgCtx.arc(ping.x, ping.y, outerRadius, 0, Math.PI * 2);
+        fgCtx.strokeStyle = ping.color;
+        fgCtx.lineWidth = 4 / zoomRef.current;
+        fgCtx.stroke();
+        
+        fgCtx.restore();
+      }
+    });
  
     // 4. SELEÇÃO: bordas, badges e alças de redimensionamento
     if (isMestre && toolRef.current === "select") {
@@ -387,6 +438,24 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   useEffect(() => {
     renderizarTelaCompleta();
   }, [linhas, images, zoom, panX, panY, selBox, showGrid, renderizarTelaCompleta]);
+
+  // 📍 LOOP DE ANIMAÇÃO EXCLUSIVO PARA O PING
+  useEffect(() => {
+    if (pings.length > 0) {
+      let animationFrame: number;
+      const renderLoop = () => {
+        renderizarTelaCompleta();
+        const agora = Date.now();
+        if (pingsRef.current.some(p => agora - p.ts < 2000)) {
+          animationFrame = requestAnimationFrame(renderLoop);
+        } else {
+          setPings([]); // Auto-limpeza quando a animação acaba
+        }
+      };
+      animationFrame = requestAnimationFrame(renderLoop);
+      return () => cancelAnimationFrame(animationFrame);
+    }
+  }, [pings, renderizarTelaCompleta]);
  
   useEffect(() => {
     if (!isMestre && tab === "tela") {
@@ -410,6 +479,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         if (payload.payload.drawings) setLinhas(payload.payload.drawings);
       });
     }
+
+    // 📍 Recebendo o Ping com Segurança de Tempo (Anti-Desincronização)
+    canal.on("broadcast", { event: "canvas_ping" }, (payload) => {
+      const pingSeguro = { ...payload.payload, ts: Date.now() };
+      setPings(prev => [...prev, pingSeguro]);
+    });
  
     canal.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -471,6 +546,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
  
   const onDown = (e: any) => {
     if (e.touches && e.touches.length === 2) {
+      if (pingTimer.current) { clearTimeout(pingTimer.current); pingTimer.current = null; }
       lastTouchDistance.current = getPinchDistance(e.touches);
       lastTouchCenter.current = getPinchCenter(e.touches);
       return;
@@ -478,6 +554,13 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     
     const p = obterPosicaoMundo(e);
     lastP.current = { x: p.x, y: p.y };
+
+    // 📍 INÍCIO DA DETECÇÃO DO PING (Se não mover por 500ms, aciona)
+    pingStartP.current = { x: p.x, y: p.y };
+    pingTimer.current = setTimeout(() => {
+      dispararPing(p.x, p.y, color); 
+      pingTimer.current = null;
+    }, 500);
  
     if (tool === "pan" || e.button === 1) {
       e.preventDefault();
@@ -550,6 +633,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const onMove = (e: any) => {
     if (e.touches && e.touches.length === 2) {
       e.preventDefault();
+      if (pingTimer.current) { clearTimeout(pingTimer.current); pingTimer.current = null; }
       const cv = bgRef.current;
       if (!cv) return;
       const rect = cv.getBoundingClientRect();
@@ -578,6 +662,16 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     }
  
     const p = obterPosicaoMundo(e);
+
+    // 📍 CANCELA O PING SE O MOUSE MOVER MUITO
+    if (pingTimer.current && pingStartP.current) {
+      const dist = Math.hypot(p.x - pingStartP.current.x, p.y - pingStartP.current.y);
+      if (dist > 15 / zoomRef.current) {
+        clearTimeout(pingTimer.current);
+        pingTimer.current = null;
+      }
+    }
+
     if (panning.current && startPan.current) {
       const nx = p.screenX - startPan.current.x;
       const ny = p.screenY - startPan.current.y;
@@ -672,6 +766,12 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       lastTouchDistance.current = null;
       lastTouchCenter.current = null;
     }
+
+    // 📍 CANCELA O PING SE SOLTAR ANTES DOS 500ms
+    if (pingTimer.current) {
+      clearTimeout(pingTimer.current);
+      pingTimer.current = null;
+    }
  
     // 🔮 Finaliza o redimensionamento
     if (resizingImg.current) {
@@ -755,4 +855,3 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     showGrid, setShowGrid 
   };
 }
- 
