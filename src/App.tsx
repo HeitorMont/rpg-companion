@@ -100,7 +100,7 @@ export default function App() {
       const { error } = await supabase
         .rpc("salvar_meu_personagem", {
           p_username: user.username,
-          p_pwhash: user.pwHash, // Aqui está seguro usar o estado pois já estamos logados há tempo dentro do jogo
+          p_pwhash: user.pwHash, 
           p_id: ch.id,
           p_name: ch.name,
           p_classe: ch.classe,
@@ -118,12 +118,15 @@ export default function App() {
       if (error) throw error;
     } catch (e) {
       console.error("Erro ao salvar personagem:", e);
+      await loadChars(user.username, user.pwHash);
+      alert("⚠️ A conexão falhou. Suas últimas alterações no personagem não foram salvas.");
     }
   };
 
-  // 🔮 Nova deleção via RPC recomendada pelo Claude!
   const deleteChar = async (id: string) => {
     if (!user) return;
+    
+    // ⚡ Atualização Otimista: Some da tela na mesma hora
     setChars(p => p.filter(c => c.id !== id));
     
     try {
@@ -137,6 +140,9 @@ export default function App() {
       if (error) throw error;
     } catch (e) {
       console.error("Erro ao deletar personagem:", e);
+      // 🔮 ROLLBACK: Se o feitiço falhar, o personagem "ressuscita" na tela do jogador
+      await loadChars(user.username, user.pwHash);
+      alert("⚠️ Erro de conexão. O personagem não pôde ser apagado do servidor.");
     }
   };
 
