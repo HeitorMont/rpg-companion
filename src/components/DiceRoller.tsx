@@ -1,14 +1,14 @@
 // src/components/DiceRoller.tsx
-import { useState } from "react";
+// ✅ CORREÇÃO: memo() impede re-render quando o pai (GameScreen) atualiza
+// estados não relacionados como `members` ou `tab`. Sem isso, qualquer ping
+// online (a cada 20s) causava re-render do roller mesmo com activeChar igual.
+import { useState, memo } from "react";
 import type { Character } from "../types";
 import { DICE, ATTRS, TC, TI, bc } from "../utils/constants";
 
-/* ── SkillPanel (Transferido para cá) ──────────────────────────────────────── */
-export function SkillPanel({ char }: { char: Character | null | undefined }) {
+export const SkillPanel = memo(function SkillPanel({ char }: { char: Character | null | undefined }) {
   const [exp, setExp] = useState<string | null>(null);
-  
   if (!char?.skills?.length) return <div style={{ textAlign: "center", color: "#374151", padding: "32px" }}><div style={{ fontSize: "40px", marginBottom: "8px" }}>⚡</div>Nenhuma habilidade.</div>;
-  
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
       {char.skills.map(s => (
@@ -29,22 +29,22 @@ export function SkillPanel({ char }: { char: Character | null | undefined }) {
       ))}
     </div>
   );
-}
+});
 
-/* ── DiceRoller Main Component ───────────────────────── */
 interface DiceRollerProps {
   activeChar: Character | null | undefined;
 }
 
-export default function DiceRoller({ activeChar }: DiceRollerProps) {
-  // Estados que eram do GameScreen e agora vivem apenas aqui!
-  const [num, setNum] = useState(1); 
-  const [dt, setDt] = useState(20); 
+// ✅ memo: se activeChar não mudar (mesma referência), o roller não re-renderiza.
+// A referência do char só muda quando o usuário edita/salva o personagem.
+const DiceRoller = memo(function DiceRoller({ activeChar }: DiceRollerProps) {
+  const [num, setNum] = useState(1);
+  const [dt, setDt] = useState(20);
   const [mb, setMb] = useState(0);
-  const [atk, setAtk] = useState("none"); 
+  const [atk, setAtk] = useState("none");
   const [rolling, setRolling] = useState(false);
-  const [dispN, setDispN] = useState<number | null>(null); 
-  const [lastR, setLastR] = useState<any>(null); 
+  const [dispN, setDispN] = useState<number | null>(null);
+  const [lastR, setLastR] = useState<any>(null);
   const [hist, setHist] = useState<any[]>([]);
   const [showSkills, setShowSkills] = useState(false);
 
@@ -165,4 +165,6 @@ export default function DiceRoller({ activeChar }: DiceRollerProps) {
       )}
     </div>
   );
-}
+});
+
+export default DiceRoller;

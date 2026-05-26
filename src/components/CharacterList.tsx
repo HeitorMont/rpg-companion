@@ -1,8 +1,10 @@
 // src/components/CharacterList.tsx
-import { useState } from "react";
+// ✅ CORREÇÃO: memo() — sem isso, qualquer atualização de `members` (presença online)
+// no GameScreen causava re-render completo da lista de personagens.
+import { useState, memo } from "react";
 import type { Character, Member, User } from "../types";
 import { ATTRS, bc } from "../utils/constants";
-
+ 
 interface CharacterListProps {
   chars: Character[];
   member: Member;
@@ -11,11 +13,10 @@ interface CharacterListProps {
   onDeleteChar: (id: string) => Promise<void> | void;
   onEditChar: (c: Character) => void;
 }
-
-export default function CharacterList({ chars, member, user, isMestre, onDeleteChar, onEditChar }: CharacterListProps) {
-  // O estado de deletar agora vive apenas aqui!
+ 
+const CharacterList = memo(function CharacterList({ chars, member, user, isMestre, onDeleteChar, onEditChar }: CharacterListProps) {
   const [delC, setDelC] = useState<string | null>(null);
-
+ 
   return (
     <div style={{ maxWidth: "560px", margin: "0 auto" }}>
       <h2 style={{ color: "#f59e0b", fontFamily: "Georgia", margin: "0 0 14px" }}>Personagens</h2>
@@ -30,15 +31,10 @@ export default function CharacterList({ chars, member, user, isMestre, onDeleteC
           {delC === c.id ? (
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span style={{ color: "#f87171", flex: 1 }}>Deletar <strong>{c.name}</strong>?</span>
-              <button 
-                onClick={async () => { 
-                  try {
-                    await onDeleteChar(c.id);
-                    setDelC(null);
-                  } catch (err) {
-                    console.error("Falha ao deletar personagem:", err);
-                    alert("Não foi possível deletar o personagem. Tente novamente.");
-                  }
+              <button
+                onClick={async () => {
+                  try { await onDeleteChar(c.id); setDelC(null); }
+                  catch (err) { console.error("Falha ao deletar:", err); alert("Não foi possível deletar. Tente novamente."); }
                 }}
                 style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold" }}
               >Sim</button>
@@ -88,4 +84,7 @@ export default function CharacterList({ chars, member, user, isMestre, onDeleteC
       ))}
     </div>
   );
-}
+});
+ 
+export default CharacterList;
+ 
