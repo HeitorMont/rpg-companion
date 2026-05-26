@@ -4,6 +4,7 @@ import type { User, Lobby, Character } from "../types";
 import { supabase } from "../lib/supabase";
 import { hashPw } from "./LoginScreen";
 import CharEditor from "./CharEditor";
+import { ATTRS } from "../utils/constants"; // 🔮 Importação dos atributos atualizados!
 
 const I = {
   background: "#111827",
@@ -35,7 +36,7 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
   const [editChar, setEditChar] = useState<Character | null>(null);
   const [showCE, setShowCE] = useState(false);
   const [delC, setDelC] = useState<string | null>(null);
-  const [delLobbyId, setDelLobbyId] = useState<string | null>(null); // 👈 Memória de confirmação de exclusão do lobby
+  const [delLobbyId, setDelLobbyId] = useState<string | null>(null);
 
   const fetchLobbies = async () => {
     try {
@@ -99,7 +100,6 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
     setLoading(false);
   };
 
-  // 🔮 Nova Magia: Dissipa o lobby na nuvem permanentemente
   const handleDeleteLobby = async (id: string) => {
     setErr("");
     try {
@@ -117,7 +117,6 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
 
   const handleJoinLobby = (lob: Lobby) => {
     setErr("");
-    // ⚔️ Runa de Proteção: Se você é o dono, pula a verificação de senha totalmente!
     if (!lob.isPublic && lob.ownerId !== user.username) {
       const inputPw = joinPw[lob.id] || "";
       if (hashPw(inputPw) !== lob.pwHash) { setErr(`Senha incorreta para a sala: ${lob.name}`); return; }
@@ -189,7 +188,6 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                         </div>
                         <div style={{ fontSize: "12px", color: "#64748b" }}>Criador: <span style={{ color: "#94a3b8" }}>{isOwner ? "Você (Mestre)" : l.ownerId}</span></div>
                         
-                        {/* O campo de senha esconde se a sala for pública OU se o jogador logado for o dono da sala privada */}
                         {!l.isPublic && !isOwner && (
                           <input type="password" style={{ ...I, padding: "6px 10px" }} value={joinPw[l.id] || ""} onChange={e => setJoinPw({ ...joinPw, [l.id]: e.target.value })} placeholder="Senha de Acesso" />
                         )}
@@ -240,9 +238,14 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                         </div>}
                       </div>
                       <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
-                        {[{ k: "for", s: "FOR" }, { k: "des", s: "DES" }, { k: "con", s: "CON" }, { k: "int", s: "INT" }, { k: "sab", s: "SAB" }, { k: "car", s: "CAR" }].map(a => {
-                          const bv = (c.bonuses as any)[a.k] || 0;
-                          return <span key={a.k} style={{ background: "#0f172a", borderRadius: "4px", padding: "2px 5px", fontSize: "10px", color: bc(bv) }}>{a.s}: {bv >= 0 ? "+" : ""}{bv}</span>
+                        {/* 🔮 O FEITIÇO FOI SINCRONIZADO AQUI! */}
+                        {ATTRS.map(a => {
+                          const bv = (c.bonuses as any)[a.key] || 0;
+                          return (
+                            <span key={a.key} style={{ background: "#0f172a", borderRadius: "4px", padding: "2px 5px", fontSize: "10px", color: bc(bv) }}>
+                              {a.short}: {bv >= 0 ? "+" : ""}{bv}
+                            </span>
+                          );
                         })}
                       </div>
                     </div>
