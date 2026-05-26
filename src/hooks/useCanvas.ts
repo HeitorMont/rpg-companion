@@ -55,9 +55,8 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     startH: number;
   } | null>(null);
 
-  // 📍 Refs do Sistema de Ping
-  const pingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pingStartP = useRef<{ x: number, y: number } | null>(null);
+  // 📍 Refs do Sistema de Ping (Anti-spam)
+  const lastPingTs = useRef<number>(0);
   const pingsRef = useRef<PingObj[]>([]);
  
   const zoomRef = useRef(1);
@@ -308,29 +307,58 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       }
     });
 
-    // 📍 RENDERIZAÇÃO DO PING ANIMADO
+    // 📍 RENDERIZAÇÃO DO PING (Gota Invertida / Pino de Mapa)
     const agora = Date.now();
     pingsRef.current.forEach(ping => {
+      const TEMPO_PING = 4000; // ⏱️ Coloque aqui o mesmo tempo do seu Cooldown!
       const idade = agora - ping.ts;
-      if (idade < 2000) { 
-        const progress = idade / 2000;
+      
+      if (idade < TEMPO_PING) { 
         fgCtx.save();
         
-        // Círculo interno pulsante (Seguro)
+        // Efeito de "Queda" (Drop) rápido nos primeiros 150ms
+        let yOffset = 0;
+        if (idade < 150) {
+          yOffset = -20 * (1 - (idade / 150));
+        }
+
+        // Efeito de Fade out suave nos últimos 200ms
+        let alpha = 1;
+        if (idade > TEMPO_PING - 200) {
+          alpha = Math.max(0, (TEMPO_PING - idade) / 200);
+        }
+        fgCtx.globalAlpha = alpha;
+        
+        const px = ping.x;
+        const py = ping.y + yOffset;
+        const r = 16 / zoomRef.current; // Tamanho da cabeça do pino
+        const cy = py - r * 1.5; // Centro da parte redonda
+        
+        // 1. Desenha o formato de Gota Invertida
         fgCtx.beginPath();
-        const radius = Math.max(0.1, (12 / zoomRef.current) + (Math.sin(progress * Math.PI * 10) * 4 / zoomRef.current));
-        fgCtx.arc(ping.x, ping.y, radius, 0, Math.PI * 2);
+        // Desenha a parte redonda superior de forma exata
+        fgCtx.arc(px, cy, r, Math.PI * 0.15, Math.PI * 0.85, true);
+        // Desce uma linha reta até a ponta (onde o clique aconteceu)
+        fgCtx.lineTo(px, py);
+        fgCtx.closePath();
+        
+        // Cor e Sombra (Dá a sensação de profundidade no mapa)
+        fgCtx.shadowColor = "rgba(0,0,0,0.5)";
+        fgCtx.shadowBlur = 6 / zoomRef.current;
+        fgCtx.shadowOffsetY = 3 / zoomRef.current;
         fgCtx.fillStyle = ping.color;
-        fgCtx.globalAlpha = Math.max(0, 1 - Math.pow(progress, 3)); 
         fgCtx.fill();
         
-        // Anel (onda sonora) em expansão (Seguro)
-        fgCtx.beginPath();
-        const outerRadius = Math.max(0.1, (10 + progress * 80) / zoomRef.current);
-        fgCtx.arc(ping.x, ping.y, outerRadius, 0, Math.PI * 2);
-        fgCtx.strokeStyle = ping.color;
-        fgCtx.lineWidth = 4 / zoomRef.current;
+        // 2. Acabamento: Borda branca e Furo no meio (Visual clássico de marcador)
+        fgCtx.shadowColor = "transparent"; 
+        fgCtx.lineWidth = 2.5 / zoomRef.current;
+        fgCtx.strokeStyle = "#ffffff";
         fgCtx.stroke();
+        
+        fgCtx.beginPath();
+        fgCtx.arc(px, cy, r * 0.35, 0, Math.PI * 2);
+        fgCtx.fillStyle = "#ffffff";
+        fgCtx.fill();
         
         fgCtx.restore();
       }
@@ -446,10 +474,13 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       const renderLoop = () => {
         renderizarTelaCompleta();
         const agora = Date.now();
-        if (pingsRef.current.some(p => agora - p.ts < 2000)) {
+        const TEMPO_PING = 4000; // ⏱️ Coloque aqui o mesmo tempo do seu Cooldown!
+        
+        // Se algum pino ainda estiver vivo, continua renderizando
+        if (pingsRef.current.some(p => agora - p.ts < TEMPO_PING)) {
           animationFrame = requestAnimationFrame(renderLoop);
         } else {
-          setPings([]); // Auto-limpeza quando a animação acaba
+          setPings([]); // Auto-limpeza quando todos os pinos expirarem
         }
       };
       animationFrame = requestAnimationFrame(renderLoop);
@@ -546,7 +577,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
  
   const onDown = (e: any) => {
     if (e.touches && e.touches.length === 2) {
-      if (pingTimer.current) { clearTimeout(pingTimer.current); pingTimer.current = null; }
       lastTouchDistance.current = getPinchDistance(e.touches);
       lastTouchCenter.current = getPinchCenter(e.touches);
       return;
@@ -555,12 +585,15 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     const p = obterPosicaoMundo(e);
     lastP.current = { x: p.x, y: p.y };
 
-    // 📍 INÍCIO DA DETECÇÃO DO PING (Se não mover por 500ms, aciona)
-    pingStartP.current = { x: p.x, y: p.y };
-    pingTimer.current = setTimeout(() => {
-      dispararPing(p.x, p.y, color); 
-      pingTimer.current = null;
-    }, 500);
+    // 🛡️ O FEITIÇO DO PING DE 1 CLIQUE (IMEDIATO) E COM ANTI-SPAM
+    if (tool === "ping") {
+      const agora = Date.now();
+      // O jogador só pode invocar um ping a cada 4 segundos!
+      if (agora - lastPingTs.current < 4000) return; 
+      lastPingTs.current = agora;
+      dispararPing(p.x, p.y, color);
+      return; // Interrompe para não fazer mais nada
+    }
  
     if (tool === "pan" || e.button === 1) {
       e.preventDefault();
@@ -633,7 +666,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const onMove = (e: any) => {
     if (e.touches && e.touches.length === 2) {
       e.preventDefault();
-      if (pingTimer.current) { clearTimeout(pingTimer.current); pingTimer.current = null; }
       const cv = bgRef.current;
       if (!cv) return;
       const rect = cv.getBoundingClientRect();
@@ -662,15 +694,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     }
  
     const p = obterPosicaoMundo(e);
-
-    // 📍 CANCELA O PING SE O MOUSE MOVER MUITO
-    if (pingTimer.current && pingStartP.current) {
-      const dist = Math.hypot(p.x - pingStartP.current.x, p.y - pingStartP.current.y);
-      if (dist > 15 / zoomRef.current) {
-        clearTimeout(pingTimer.current);
-        pingTimer.current = null;
-      }
-    }
 
     if (panning.current && startPan.current) {
       const nx = p.screenX - startPan.current.x;
@@ -765,12 +788,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     if (e && e.touches && e.touches.length < 2) {
       lastTouchDistance.current = null;
       lastTouchCenter.current = null;
-    }
-
-    // 📍 CANCELA O PING SE SOLTAR ANTES DOS 500ms
-    if (pingTimer.current) {
-      clearTimeout(pingTimer.current);
-      pingTimer.current = null;
     }
  
     // 🔮 Finaliza o redimensionamento
