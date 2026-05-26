@@ -16,7 +16,7 @@ export const ATTRS = [
 ];
 
 // 🎨 Paleta de cores da caneta de desenho (Mesa Virtual / Canvas)
-export const PAL = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316", "#ffffff", "#94a3b8"];
+export const PAL = ["#ef4444", "#3b82f6", "#22c55e", "#eab208", "#a855f7", "#f97316", "#ffffff", "#94a3b8","#1cd3f3", "#ec4899","#074b29","#000000" ];
 
 // ⚡ Cores baseadas no Tipo de Habilidade (Type Colors)
 // Ex: Habilidades de ataque ficam vermelhas, passivas ficam azuis...

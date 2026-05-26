@@ -61,6 +61,17 @@ export default function SessionPanel({ lobby, member, user, chars, members, isAn
         {members.length === 0 && <div style={{ color: "#374151", fontSize: "13px", textAlign: "center", padding: "16px" }}>Ninguém mais na sessão.</div>}
         {members.map(m => (
           <div key={m.username} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px", background: "#0f172a", borderRadius: "8px", marginBottom: "6px" }}>
+            
+            {/* 🔮 A BOLINHA INDICADORA DA COR EXCLUSIVA DO JOGADOR */}
+            <div style={{ 
+              width: "12px", 
+              height: "12px", 
+              borderRadius: "50%", 
+              background: m.color, // A cor gerada automaticamente e salva no banco!
+              boxShadow: `0 0 8px ${m.color}55`,
+              flexShrink: 0 
+            }} />
+
             <span style={{ fontSize: "18px" }}>{m.role === "mestre" ? "👑" : m.role === "espectador" ? "👁️" : "⚔️"}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: "bold", fontSize: "14px" }}>{m.username}{m.username === user.username ? " (você)" : ""}</div>

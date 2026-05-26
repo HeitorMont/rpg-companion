@@ -60,6 +60,7 @@ export interface Member {
   charId: string | null;
   lobbyId: string;
   ts: number;
+  color?: string;
 }
 
 export interface ImageObj {

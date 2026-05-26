@@ -16,17 +16,12 @@ interface CanvasToolbarProps {
 }
 
 function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
-  const [showColorPop, setShowColorPop] = useState(false);
-  const [showSizePop, setShowSizePop] = useState(false); // 🔮 Memória para o menu de Tamanho
-  const colorPopRef = useRef<HTMLDivElement>(null);
+  const [showSizePop, setShowSizePop] = useState(false); 
   const sizePopRef = useRef<HTMLDivElement>(null);
 
   // Fecha os popups ao clicar fora deles
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (colorPopRef.current && !colorPopRef.current.contains(e.target as Node)) {
-        setShowColorPop(false);
-      }
       if (sizePopRef.current && !sizePopRef.current.contains(e.target as Node)) {
         setShowSizePop(false);
       }
@@ -35,13 +30,11 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // 🛡️ LISTA INTELIGENTE: Mestre vê tudo, Jogador vê apenas Arrastar e Ping
   const tools = isMestre ? [
     { id: "pan", icon: "✋", label: "Arrastar" },
     { id: "select", icon: "🖱️", label: "Selecionar" },
     { id: "pen", icon: "✏️", label: "Caneta" },
-    { id: "eraser", icon: "⬜", label: "Borracha" },
-    { id: "ping", icon: "📍", label: "Sinalizar (Ping)" }
+    { id: "eraser", icon: "⬜", label: "Borracha" }
   ] : [
     { id: "pan", icon: "✋", label: "Arrastar Mapa" },
     { id: "ping", icon: "📍", label: "Sinalizar (Ping)" }
@@ -67,7 +60,6 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
             onClick={() => { 
               cv.setTool(t.id); 
               if (t.id !== "select") cv.setSelImg([]); 
-              setShowColorPop(false); 
               setShowSizePop(false); 
             }}
             style={{
@@ -85,54 +77,36 @@ function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
 
         <div style={{ width: "1px", height: "26px", background: "#334155", margin: "0 2px" }} />
 
-        {/* 🎨 Painel Popup DE COR (Sempre visível para Mestre e Jogadores) */}
-        <div ref={colorPopRef} style={{ position: "relative" }}>
-          <button
-            title="Cor do Traço / Ping"
-            onClick={() => { setShowColorPop(v => !v); setShowSizePop(false); }}
+        {/* 🎨 BOTÃO DE ESPECTRO INFINITO DIRETO (Exclusivo do Mestre) */}
+        {isMestre && (
+          <div
+            title="Cor do Traço"
+            onClick={() => setShowSizePop(false)}
             style={{
               width: "40px", height: "40px", borderRadius: "11px", border: "none",
-              background: showColorPop ? "#374151" : "transparent", color: "#94a3b8",
-              cursor: "pointer", fontSize: "17px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              background: "transparent", color: "#94a3b8", cursor: "pointer", position: "relative",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0,
             }}
           >
-            🎨
-          </button>
+            <span style={{ fontSize: "17px", pointerEvents: "none" }}>🎨</span>
+            {/* 🔮 Barrinha mágica que mostra qual cor está selecionada */}
+            <div style={{ width: "16px", height: "4px", background: cv.color, borderRadius: "2px", marginTop: "2px", pointerEvents: "none" }} />
+            
+            <input 
+              type="color" 
+              value={cv.color} 
+              onChange={e => { cv.setColor(e.target.value); cv.setTool("pen"); }}
+              style={{ position: "absolute", opacity: 0, width: "100%", height: "100%", cursor: "pointer", top: 0, left: 0 }}
+            />
+          </div>
+        )}
 
-          {showColorPop && (
-            <div style={{
-              position: "absolute", bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
-              background: "#1e293b", border: "1px solid #334155", borderRadius: "12px",
-              padding: "10px", display: "flex", gap: "5px", justifyContent: "center",
-              zIndex: 30, boxShadow: "0 4px 20px rgba(0,0,0,.6)", minWidth: "160px",
-            }}>
-              {PAL.map(cor => (
-                <button
-                  key={cor}
-                  onClick={() => { 
-                    cv.setColor(cor); 
-                    // Se o Mestre não estiver no Ping, vai pra Caneta. Se o Jogador não estiver no Ping, vai pro Ping.
-                    if (isMestre && cv.tool !== "ping") cv.setTool("pen"); 
-                    if (!isMestre && cv.tool !== "ping") cv.setTool("ping");
-                    setShowColorPop(false); 
-                  }} 
-                  style={{
-                    width: "24px", height: "24px", background: cor,
-                    border: cv.color === cor ? "2.5px solid #fff" : "2px solid #374151",
-                    borderRadius: "50%", cursor: "pointer", flexShrink: 0,
-                  }}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 📏 Painel Popup APENAS DE TAMANHO (Exclusivo do Mestre, para Caneta e Borracha) */}
+        {/* 📏 Painel Popup APENAS DE TAMANHO (Aparece para Caneta e Borracha) */}
         {isMestre && (cv.tool === "pen" || cv.tool === "eraser") && (
           <div ref={sizePopRef} style={{ position: "relative" }}>
             <button
               title="Tamanho do Traço"
-              onClick={() => { setShowSizePop(v => !v); setShowColorPop(false); }}
+              onClick={() => { setShowSizePop(v => !v); }}
               style={{
                 width: "40px", height: "40px", borderRadius: "11px", border: "none",
                 background: showSizePop ? "#374151" : "transparent", color: "#94a3b8",
@@ -254,20 +228,57 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
   const cv = useCanvas(lobby.id, isMestre, tab);
 
+  const corDefinida = useRef(false);
+
   useEffect(() => {
     const pingOnline = async () => {
       try {
-        await supabase.from("members").upsert({ lobby_id: lobby.id, username: user.username, role: member.role, char_id: member.charId || null, ts: Date.now() });
+        let corParaEnviar = cv.color;
+
+        if (!corDefinida.current && !isMestre) {
+          const { data } = await supabase.from("members").select("color, ts, username").eq("lobby_id", lobby.id);
+          if (data) {
+            const ativos = data.filter((m: any) => m.username !== user.username && Date.now() - m.ts < 40000);
+            const coresOcupadas = ativos.map((m: any) => m.color);
+            const coresLivres = PAL.filter(c => !coresOcupadas.includes(c));
+            
+            if (coresLivres.length > 0) {
+              corParaEnviar = coresLivres[Math.floor(Math.random() * coresLivres.length)];
+            } else {
+              corParaEnviar = PAL[Math.floor(Math.random() * PAL.length)];
+            }
+          }
+          cv.setColor(corParaEnviar);
+          corDefinida.current = true;
+        }
+
+        await supabase.from("members").upsert({ 
+          lobby_id: lobby.id, 
+          username: user.username, 
+          role: member.role, 
+          char_id: member.charId || null, 
+          ts: Date.now(), 
+          color: isMestre ? cv.color : corParaEnviar 
+        });
       } catch {}
     };
-    pingOnline(); const iv = setInterval(pingOnline, 20000); return () => clearInterval(iv);
-  }, [lobby.id, member, user.username]);
+    pingOnline(); 
+    const iv = setInterval(pingOnline, 20000); 
+    return () => clearInterval(iv);
+  }, [lobby.id, member, user.username, isMestre, cv.color]);
 
   const fetchActiveMembers = async () => {
     try {
       const { data } = await supabase.from("members").select("*").eq("lobby_id", lobby.id);
       if (data) {
-        const active = data.filter((m: any) => Date.now() - m.ts < 40000).map((m: any) => ({ lobbyId: m.lobby_id, username: m.username, role: m.role, charId: m.char_id, ts: m.ts }));
+        const active = data.filter((m: any) => Date.now() - m.ts < 40000).map((m: any) => ({ 
+          lobbyId: m.lobby_id, 
+          username: m.username, 
+          role: m.role, 
+          charId: m.char_id, 
+          ts: m.ts,
+          color: m.color || "#ef4444" 
+        }));
         setMembers(active);
       }
     } catch {}
@@ -301,7 +312,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
   const canvasPanelJSX = (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 110px)", position: "relative" }}>
-      {/* CSS embutido minimalista para animações táteis e efeitos de hover */}
       <style>{`
         .canvas-toolbar-mobile button:hover { background: #374151 !important; }
         .canvas-toolbar-mobile button:active { transform: scale(0.92); }
@@ -345,7 +355,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
   return (
     <div style={{ background: "#0f172a", minHeight: "100vh", color: "#e2e8f0", fontFamily: "'Segoe UI',sans-serif", display: "flex", flexDirection: "column" }}>
-      {/* Header do Lobby */}
       <div style={{ background: "#1e293b", borderBottom: "2px solid #f59e0b", padding: "8px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
         <span style={{ fontSize: "20px" }}>🎲</span>
         <span style={{ color: "#f59e0b", fontSize: "16px", fontWeight: "bold", fontFamily: "Georgia", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "130px" }}>{lobby.name}</span>
@@ -360,7 +369,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         </div>
       </div>
 
-      {/* Menu de Abas Superiores */}
       <div style={{ display: "flex", background: "#1e293b", borderBottom: "1px solid #0f172a" }}>
         {TABS.map(([id, ico]) => (
           <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "9px 2px", background: "none", border: "none", borderBottom: tab === id ? "3px solid #f59e0b" : "3px solid transparent", color: tab === id ? "#f59e0b" : "#64748b", cursor: "pointer", fontSize: "11px", transition: "all .2s" }}>
@@ -370,7 +378,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         ))}
       </div>
 
-      {/* Janela de Conteúdo Dinâmico */}
       <div style={{
         flex: 1,
         overflowY: isCanvas ? "hidden" : "auto",
