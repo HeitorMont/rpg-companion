@@ -13,6 +13,8 @@ const HANDLE_VISUAL_PX = 10;
 // Área de colisão da alça (maior para facilitar o toque no celular)
 const HANDLE_HIT_PX = 22;
 
+const TEMPO_PING = 4000;
+
 // 📍 Tipo do Ping
 type PingObj = { id: string; x: number; y: number; color: string; ts: number };
  
@@ -310,7 +312,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     // 📍 RENDERIZAÇÃO DO PING (Gota Invertida / Pino de Mapa)
     const agora = Date.now();
     pingsRef.current.forEach(ping => {
-      const TEMPO_PING = 4000; // ⏱️ Coloque aqui o mesmo tempo do seu Cooldown!
       const idade = agora - ping.ts;
       
       if (idade < TEMPO_PING) { 
@@ -474,7 +475,6 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       const renderLoop = () => {
         renderizarTelaCompleta();
         const agora = Date.now();
-        const TEMPO_PING = 4000; // ⏱️ Coloque aqui o mesmo tempo do seu Cooldown!
         
         // Se algum pino ainda estiver vivo, continua renderizando
         if (pingsRef.current.some(p => agora - p.ts < TEMPO_PING)) {
@@ -589,7 +589,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     if (tool === "ping") {
       const agora = Date.now();
       // O jogador só pode invocar um ping a cada 4 segundos!
-      if (agora - lastPingTs.current < 4000) return; 
+      if (agora - lastPingTs.current < TEMPO_PING) return; 
       lastPingTs.current = agora;
       dispararPing(p.x, p.y, color);
       return; // Interrompe para não fazer mais nada
