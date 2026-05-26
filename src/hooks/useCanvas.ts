@@ -138,10 +138,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       lastBroadcast.current = Date.now();
     };
  
-    if (Date.now() - lastBroadcast.current > 40) {
+    if (Date.now() - lastBroadcast.current > 80) {
       dispararBroadcast();
     } else {
-      tFast = setTimeout(dispararBroadcast, 40);
+      tFast = setTimeout(dispararBroadcast, 80);
     }
  
     const tSlow = setTimeout(async () => {
