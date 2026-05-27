@@ -144,10 +144,10 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       lastBroadcast.current = Date.now();
     };
  
-    if (Date.now() - lastBroadcast.current > 80) {
+    if (Date.now() - lastBroadcast.current > 20) {
       dispararBroadcast();
     } else {
-      tFast = setTimeout(dispararBroadcast, 80);
+      tFast = setTimeout(dispararBroadcast, 20);
     }
  
     const tSlow = setTimeout(async () => {
@@ -761,6 +761,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   };
  
   const clearCv = async () => {
+    await deleteImagesFromStorage(imagesRef.current);
     setImages([]); setSelImg([]); setLinhas([]);
     linhasRef.current = [];
     imageCache.current.clear(); 
@@ -801,6 +802,31 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       }
     };
     el.src = tempUrl;
+  };
+
+  // 🔮 MAGIA NOVA: Elimina fisicamente os ficheiros do Storage
+  const deleteImagesFromStorage = async (imagesToDelete: ImageObj[]) => {
+    // Extrai apenas o caminho interno do ficheiro a partir do URL público
+    const paths = imagesToDelete
+      .filter(img => img.dataUrl.includes("/canvas_images/")) // Garante que está no storage
+      .map(img => img.dataUrl.split('/canvas_images/')[1])
+      .filter(Boolean);
+
+    if (paths.length > 0) {
+      try {
+        await supabase.storage.from("canvas_images").remove(paths);
+      } catch (err) {
+        console.error("Erro ao eliminar imagens do Cofre:", err);
+      }
+    }
+  };
+
+  // 🔮 MAGIA NOVA: Elimina as imagens selecionadas (Ecrã + Storage)
+  const deleteSelectedImages = async () => {
+    const toDelete = imagesRef.current.filter(img => selImgRef.current.includes(img.id));
+    await deleteImagesFromStorage(toDelete); // Apaga do Supabase
+    setImages(prev => prev.filter(img => !selImgRef.current.includes(img.id))); // Apaga do ecrã
+    setSelImg([]);
   };
  
   // 🔮 MAGIA NOVA: Upload direto para o Supabase Storage ao colar (Ctrl+V)
@@ -847,6 +873,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     linhas, setLinhas, images, setImages, selImg, setSelImg, selBox,
     bgRef, drawRef, fgRef, contRef, fileRef, clearCv, loadImg, onDown, onMove, onUp,
     zoom, panX, panY,
-    showGrid, setShowGrid 
+    showGrid, setShowGrid,
+    deleteSelectedImages 
   };
 }

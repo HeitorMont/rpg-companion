@@ -79,7 +79,7 @@ const CanvasToolbar = memo(function CanvasToolbar({ cv, isMestre }: CanvasToolba
           <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "bold", paddingRight: "4px", borderRight: "1px solid #334155", marginRight: "4px" }}>{cv.selImg.length} SEL</span>
           <button onClick={() => cv.setImages(prev => prev.map(img => cv.selImg.includes(img.id) ? { ...img, layer: "token" } : img))} style={{ padding: "5px 10px", borderRadius: "8px", border: "1px solid #60a5fa22", background: "#1e3a5f", color: "#60a5fa", cursor: "pointer", fontSize: "12px", fontWeight: "bold", fontFamily: "inherit" }}>⬆️ Frente</button>
           <button onClick={() => cv.setImages(prev => prev.map(img => cv.selImg.includes(img.id) ? { ...img, layer: "map" } : img))} style={{ padding: "5px 10px", borderRadius: "8px", border: "1px solid #f59e0b22", background: "#422006", color: "#f59e0b", cursor: "pointer", fontSize: "12px", fontWeight: "bold", fontFamily: "inherit" }}>⬇️ Fundo</button>
-          <button onClick={() => { cv.setImages(prev => prev.filter(img => !cv.selImg.includes(img.id))); cv.setSelImg([]); }} style={{ padding: "5px 10px", borderRadius: "8px", border: "1px solid #ef444422", background: "#1c0a0a", color: "#ef4444", cursor: "pointer", fontSize: "12px", fontWeight: "bold", fontFamily: "inherit" }}>🗑️ Excluir</button>
+          <button onClick={() => cv.deleteSelectedImages()} style={{ padding: "5px 10px", borderRadius: "8px", border: "1px solid #ef444422", background: "#1c0a0a", color: "#ef4444", cursor: "pointer", fontSize: "12px", fontWeight: "bold", fontFamily: "inherit" }}>🗑️ Excluir</button>
         </div>
       )}
     </>

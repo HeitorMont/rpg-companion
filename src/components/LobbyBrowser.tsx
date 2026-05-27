@@ -100,9 +100,46 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
     setLoading(false);
   };
 
+  // 🔮 MAGIA NOVA: Apaga todos os ficheiros da pasta do Lobby no Storage
+  const apagarImagensDoLobby = async (lobbyId: string) => {
+    try {
+      // 1. O feitiço de Vidência: Lista tudo o que tem dentro da pasta do lobby
+      const { data: files, error: listError } = await supabase
+        .storage
+        .from("canvas_images")
+        .list(lobbyId);
+
+      if (listError) throw listError;
+      
+      // Se a pasta estiver vazia, a magia termina aqui
+      if (!files || files.length === 0) return; 
+
+      // 2. Prepara os alvos: Junta o nome da pasta com o nome do ficheiro
+      const caminhosParaDeletar = files.map(file => `${lobbyId}/${file.name}`);
+
+      // 3. Evaporação: Elimina todos os ficheiros listados de uma vez
+      const { error: deleteError } = await supabase
+        .storage
+        .from("canvas_images")
+        .remove(caminhosParaDeletar);
+
+      if (deleteError) throw deleteError;
+      
+      console.log(`Lixo recolhido: ${caminhosParaDeletar.length} imagens evaporadas do cofre!`);
+
+    } catch (err) {
+      console.error("Erro ao purificar o cofre do lobby:", err);
+    }
+  };
+
+  // 🔮 FEITIÇO ATUALIZADO: Agora purifica o Storage antes de apagar o Lobby
   const handleDeleteLobby = async (id: string) => {
     setErr("");
     try {
+      // PRIMEIRO: Purifica o cofre (Storage) de quaisquer mapas e tokens
+      await apagarImagensDoLobby(id);
+
+      // DEPOIS: Elimina o lobby da base de dados
       const { error } = await supabase
         .from("lobbies")
         .delete()
