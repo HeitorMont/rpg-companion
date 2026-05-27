@@ -1,6 +1,4 @@
 // src/components/CharacterList.tsx
-// ✅ CORREÇÃO: memo() — sem isso, qualquer atualização de `members` (presença online)
-// no GameScreen causava re-render completo da lista de personagens.
 import { useState, memo } from "react";
 import type { Character, Member, User } from "../types";
 import { ATTRS, bc } from "../utils/constants";

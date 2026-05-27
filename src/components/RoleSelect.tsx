@@ -2,17 +2,7 @@
 import { useState, useEffect } from "react";
 import type { User, Lobby, Character, Member } from "../types";
 import { supabase } from "../lib/supabase"; 
-
-const I = {
-  background: "#111827",
-  border: "1px solid #374151",
-  borderRadius: "8px",
-  padding: "10px",
-  color: "#e5e7eb",
-  fontSize: "14px",
-  width: "100%",
-  boxSizing: "border-box" as const,
-};
+import { I } from "../utils/constants";
 
 interface RoleSelectProps {
   user: User; lobby: Lobby; chars: Character[];

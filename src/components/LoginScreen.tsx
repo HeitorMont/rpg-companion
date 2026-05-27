@@ -2,22 +2,12 @@
 import { useState } from "react";
 import type { User } from "../types";
 import { supabase } from "../lib/supabase"; // 👈 Invocando a ponte oficial do Supabase
+import { I } from "../utils/constants";
 
 export const hashPw = (s: string) => {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
   return (h >>> 0).toString(36);
-};
-
-const I = {
-  background: "#111827",
-  border: "1px solid #374151",
-  borderRadius: "8px",
-  padding: "8px 10px",
-  color: "#e5e7eb",
-  fontSize: "14px",
-  width: "100%",
-  boxSizing: "border-box" as const,
 };
 
 interface LoginScreenProps {

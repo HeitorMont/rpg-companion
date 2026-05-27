@@ -1,21 +1,13 @@
 // src/components/CharEditor.tsx
 import { useState } from "react";
 import type { Character, Skill } from "../types";
+import { I, ATTRS } from "../utils/constants";
 
-// Auxiliares locais para o CharEditor funcionar de forma independente
-const ATTRS = [
-  {key:"for",short:"FOR",label:"Força"},{key:"des",short:"DES",label:"Destreza"},
-  {key:"con",short:"CON",label:"Constituição"},{key:"int",short:"INT",label:"Inteligência"},
-  {key:"sab",short:"SAB",label:"Sabedoria"},{key:"car",short:"CAR",label:"Carisma"},
-  {key:"sob",short:"SOB",label:"Sobrevivência"},{key:"sor",short:"SOR",label:"Sorte"},
-  {key:"fe",short:"FÉ",label:"Fé"},
-];
 const fBon = () => ({for:0,des:0,con:0,int:0,sab:0,car:0,sob:0,sor:0,fe:0});
 const mkId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const fSkill = (): Skill => ({id:mkId(),name:"",type:"ativa",description:"",cost:"",damage:"",cooldown:""});
 const fChar = (own: string): Character => ({id:mkId(),owner:own,name:"",classe:"",raca:"",nivel:1,hp:10,hpMax:10,vigor:0,vigorMax:0,bonuses:fBon(),skills:[],notes:""});
 
-const I = {background:"#111827",border:"1px solid #374151",borderRadius:"8px",padding:"8px 10px",color:"#e5e7eb",fontSize:"14px",width:"100%",boxSizing:"border-box" as const};
 const SI = {...I,padding:"6px 8px",fontSize:"13px"};
 
 function SkillEditor({skills = [], onChange}: {skills: Skill[], onChange: (s: Skill[]) => void}) {

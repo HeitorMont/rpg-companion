@@ -15,9 +15,6 @@ interface CanvasToolbarProps {
   isMestre: boolean;
 }
 
-// ✅ CORREÇÃO: React.memo evita que a toolbar redesenhe a cada movimento do mouse
-// no canvas (que atualiza panX/panY via useState). Sem memo, cada pixel arrastado
-// causava um re-render completo da toolbar.
 const CanvasToolbar = memo(function CanvasToolbar({ cv, isMestre }: CanvasToolbarProps) {
   const [showSizePop, setShowSizePop] = useState(false);
   const sizePopRef = useRef<HTMLDivElement>(null);
