@@ -116,19 +116,22 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
   const broadcastRef = useRef<any>(null);
   const lastBroadcast = useRef(0);
   
+  // 🔮 Busca o estado do mapa quando o Mestre entra na sala
   useEffect(() => {
     if (!isMestre) return;
     (async () => {
       try {
-        const { data } = await supabase.from("canvas_state").select("images, drawings").eq("lobby_id", lobbyId).maybeSingle();
+        const { data } = await supabase.from("canvas_state").select("images, drawings, show_grid").eq("lobby_id", lobbyId).maybeSingle();
         if (data) {
           if (data.images) setImages(data.images as ImageObj[]);
           if (data.drawings) setLinhas(data.drawings as Linha[]);
+          if (data.show_grid !== undefined) setShowGrid(data.show_grid); // Puxa a grid guardada
         }
       } catch {}
     })();
   }, [isMestre, lobbyId]);
  
+  // 🔮 O Motor de Sincronização em Tempo Real do Mestre
   useEffect(() => {
     if (!isMestre) return;
  
@@ -138,16 +141,16 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
         broadcastRef.current.send({
           type: "broadcast",
           event: "canvas_fast",
-          payload: { images: images, drawings: linhasRef.current } 
+          payload: { images: images, drawings: linhasRef.current, showGrid: showGridRef.current } // Envia a grid ao vivo!
         });
       }
       lastBroadcast.current = Date.now();
     };
  
-    if (Date.now() - lastBroadcast.current > 20) {
+    if (Date.now() - lastBroadcast.current > 80) {
       dispararBroadcast();
     } else {
-      tFast = setTimeout(dispararBroadcast, 20);
+      tFast = setTimeout(dispararBroadcast, 80);
     }
  
     const tSlow = setTimeout(async () => {
@@ -158,6 +161,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
             lobby_id: lobbyId,
             images: images,
             drawings: linhasRef.current,
+            show_grid: showGridRef.current, // Guarda a grid na base de dados!
             ts: Date.now()
           });
         
@@ -171,7 +175,8 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       clearTimeout(tFast);
       clearTimeout(tSlow);
     };
-  }, [images, linhas, isMestre, lobbyId]);
+  // 📍 ATENÇÃO AQUI: showGrid foi adicionado às dependências!
+  }, [images, linhas, showGrid, isMestre, lobbyId]);
  
   const dispararPing = useCallback((px: number, py: number, cor: string) => {
     const newPing = { id: mkId(), x: px, y: py, color: cor, ts: Date.now() };
@@ -442,14 +447,16 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     }
   }, [pings, renderizarTelaCompleta]);
  
+  // 🔮 Os Jogadores recebem a Grid do servidor e ao vivo
   useEffect(() => {
     if (!isMestre && tab === "tela") {
       const carregarDados = async () => {
         try {
-          const { data } = await supabase.from("canvas_state").select("images, drawings").eq("lobby_id", lobbyId).maybeSingle();
+          const { data } = await supabase.from("canvas_state").select("images, drawings, show_grid").eq("lobby_id", lobbyId).maybeSingle();
           if (data) {
             if (data.images) setImages(data.images as ImageObj[]);
             if (data.drawings) setLinhas(data.drawings as Linha[]);
+            if (data.show_grid !== undefined) setShowGrid(data.show_grid); // Puxa inicial
           }
         } catch {}
       };
@@ -462,9 +469,11 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
       canal.on("broadcast", { event: "canvas_fast" }, (payload) => {
         if (payload.payload.images) setImages(payload.payload.images);
         if (payload.payload.drawings) setLinhas(payload.payload.drawings);
+        if (payload.payload.showGrid !== undefined) setShowGrid(payload.payload.showGrid); // Recebe ao vivo!
       });
     }
 
+    // Recebendo o Ping com Segurança de Tempo
     canal.on("broadcast", { event: "canvas_ping" }, (payload) => {
       const pingSeguro = { ...payload.payload, ts: Date.now() };
       setPings(prev => [...prev, pingSeguro]);
