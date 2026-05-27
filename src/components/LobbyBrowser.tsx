@@ -4,20 +4,7 @@ import type { User, Lobby, Character } from "../types";
 import { supabase } from "../lib/supabase";
 import { hashPw } from "./LoginScreen";
 import CharEditor from "./CharEditor";
-import { ATTRS } from "../utils/constants"; // 🔮 Importação dos atributos atualizados!
-
-const I = {
-  background: "#111827",
-  border: "1px solid #374151",
-  borderRadius: "8px",
-  padding: "8px 10px",
-  color: "#e5e7eb",
-  fontSize: "14px",
-  width: "100%",
-  boxSizing: "border-box" as const,
-};
-
-const bc = (v: number) => (v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#475569");
+import { ATTRS, I, bc } from "../utils/constants";
 
 interface LobbyBrowserProps {
   user: User; chars: Character[]; onLogout: () => void;
@@ -100,10 +87,8 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
     setLoading(false);
   };
 
-  // 🔮 MAGIA NOVA: Apaga todos os ficheiros da pasta do Lobby no Storage
   const apagarImagensDoLobby = async (lobbyId: string) => {
     try {
-      // 1. O feitiço de Vidência: Lista tudo o que tem dentro da pasta do lobby
       const { data: files, error: listError } = await supabase
         .storage
         .from("canvas_images")
@@ -111,13 +96,10 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
 
       if (listError) throw listError;
       
-      // Se a pasta estiver vazia, a magia termina aqui
       if (!files || files.length === 0) return; 
 
-      // 2. Prepara os alvos: Junta o nome da pasta com o nome do ficheiro
       const caminhosParaDeletar = files.map(file => `${lobbyId}/${file.name}`);
 
-      // 3. Evaporação: Elimina todos os ficheiros listados de uma vez
       const { error: deleteError } = await supabase
         .storage
         .from("canvas_images")
@@ -126,20 +108,16 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
       if (deleteError) throw deleteError;
       
       console.log(`Lixo recolhido: ${caminhosParaDeletar.length} imagens evaporadas do cofre!`);
-
     } catch (err) {
       console.error("Erro ao purificar o cofre do lobby:", err);
     }
   };
 
-  // 🔮 FEITIÇO ATUALIZADO: Agora purifica o Storage antes de apagar o Lobby
   const handleDeleteLobby = async (id: string) => {
     setErr("");
     try {
-      // PRIMEIRO: Purifica o cofre (Storage) de quaisquer mapas e tokens
       await apagarImagensDoLobby(id);
 
-      // DEPOIS: Elimina o lobby da base de dados
       const { error } = await supabase
         .from("lobbies")
         .delete()
@@ -167,6 +145,47 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
       <CharEditor char={editChar} owner={user.username} onSave={async c => { await onSaveChar(c); setShowCE(false); setEditChar(null); }} onCancel={() => { setShowCE(false); setEditChar(null); }} />
     </div>
   );
+
+  // 🔮 MAGIA NOVA: Separando os lobbies
+  const myLobbies = lobbies.filter(l => l.ownerId === user.username);
+  const otherLobbies = lobbies.filter(l => l.ownerId !== user.username);
+
+  // 🔮 Criando um componente interno para não duplicar o código visual do Lobby
+  const renderLobbyCard = (l: Lobby) => {
+    const isOwner = l.ownerId === user.username;
+    return (
+      <div key={l.id} style={{ background: "#1e293b", borderRadius: "10px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+        {delLobbyId === l.id ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%" }}>
+            <span style={{ color: "#f87171", flex: 1, fontSize: "14px" }}>Dissipar e excluir permanentemente a mesa <strong>{l.name}</strong>?</span>
+            <button onClick={async () => { await handleDeleteLobby(l.id); setDelLobbyId(null); }} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Sim</button>
+            <button onClick={() => setDelLobbyId(null)} style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "12px" }}>Não</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontWeight: "bold", fontSize: "16px" }}>{l.name}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "10px", background: l.isPublic ? "#14532d" : "#7f1d1d", color: l.isPublic ? "#4ade80" : "#f87171", fontWeight: "bold" }}>{l.isPublic ? "🔓 PÚBLICA" : "🔒 PRIVADA"}</span>
+                {isOwner && (
+                  <button onClick={() => setDelLobbyId(l.id)} style={{ background: "transparent", color: "#f87171", border: "none", cursor: "pointer", fontSize: "14px", padding: 0 }} title="Dissipar Mesa">🗑️</button>
+                )}
+              </div>
+            </div>
+            <div style={{ fontSize: "12px", color: "#64748b" }}>Criador: <span style={{ color: "#94a3b8" }}>{isOwner ? "Você (Mestre)" : l.ownerId}</span></div>
+            
+            {!l.isPublic && !isOwner && (
+              <input type="password" style={{ ...I, padding: "6px 10px" }} value={joinPw[l.id] || ""} onChange={e => setJoinPw({ ...joinPw, [l.id]: e.target.value })} placeholder="Senha de Acesso" />
+            )}
+            
+            <button onClick={() => handleJoinLobby(l)} style={{ width: "100%", background: "#111827", color: "#f59e0b", border: "1px solid #f59e0b", padding: "8px", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", transition: "all .2s" }}>
+              {isOwner ? "Iniciar Sessão (Mestre) →" : "Entrar na Mesa →"}
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ background: "#0f172a", minHeight: "100vh", color: "#e2e8f0", fontFamily: "'Segoe UI',sans-serif" }}>
@@ -200,43 +219,21 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
             </div>
 
             <div style={{ display: "grid", gap: "10px" }}>
-              <h3 style={{ margin: "10px 0 0", color: "#64748b", fontSize: "12px", fontWeight: "bold", letterSpacing: "1px" }}>MESAS ONLINE</h3>
-              {lobbies.length === 0 && <div style={{ color: "#374151", textAlign: "center", padding: "30px" }}>Nenhum lobby ativo neste plano astral.</div>}
-              {lobbies.map(l => {
-                const isOwner = l.ownerId === user.username;
-                return (
-                  <div key={l.id} style={{ background: "#1e293b", borderRadius: "10px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    {delLobbyId === l.id ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%" }}>
-                        <span style={{ color: "#f87171", flex: 1, fontSize: "14px" }}>Dissipar e excluir permanentemente a mesa <strong>{l.name}</strong>?</span>
-                        <button onClick={async () => { await handleDeleteLobby(l.id); setDelLobbyId(null); }} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Sim</button>
-                        <button onClick={() => setDelLobbyId(null)} style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "12px" }}>Não</button>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span style={{ fontWeight: "bold", fontSize: "16px" }}>{l.name}</span>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "10px", background: l.isPublic ? "#14532d" : "#7f1d1d", color: l.isPublic ? "#4ade80" : "#f87171", fontWeight: "bold" }}>{l.isPublic ? "🔓 PÚBLICA" : "🔒 PRIVADA"}</span>
-                            {isOwner && (
-                              <button onClick={() => setDelLobbyId(l.id)} style={{ background: "transparent", color: "#f87171", border: "none", cursor: "pointer", fontSize: "14px", padding: 0 }} title="Dissipar Mesa">🗑️</button>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#64748b" }}>Criador: <span style={{ color: "#94a3b8" }}>{isOwner ? "Você (Mestre)" : l.ownerId}</span></div>
-                        
-                        {!l.isPublic && !isOwner && (
-                          <input type="password" style={{ ...I, padding: "6px 10px" }} value={joinPw[l.id] || ""} onChange={e => setJoinPw({ ...joinPw, [l.id]: e.target.value })} placeholder="Senha de Acesso" />
-                        )}
-                        
-                        <button onClick={() => handleJoinLobby(l)} style={{ width: "100%", background: "#111827", color: "#f59e0b", border: "1px solid #f59e0b", padding: "8px", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", transition: "all .2s" }}>
-                          {isOwner ? "Iniciar Sessão (Mestre) →" : "Entrar na Mesa →"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
+              {/* 🛡️ SEÇÃO 1: SUAS MESAS */}
+              {myLobbies.length > 0 && (
+                <>
+                  <h3 style={{ margin: "10px 0 0", color: "#64748b", fontSize: "12px", fontWeight: "bold", letterSpacing: "1px" }}>SUAS MESAS</h3>
+                  {myLobbies.map(renderLobbyCard)}
+                </>
+              )}
+
+              {/* 🛡️ SEÇÃO 2: MESAS ONLINE (OUTROS) */}
+              <h3 style={{ margin: "10px 0 10px", color: "#64748b", fontSize: "12px", fontWeight: "bold", letterSpacing: "1px" }}>MESAS ONLINE</h3>
+              {otherLobbies.length === 0 ? (
+                <div style={{ color: "#374151", textAlign: "center", padding: "20px" }}>Nenhuma outra mesa ativa neste plano astral.</div>
+              ) : (
+                otherLobbies.map(renderLobbyCard)
+              )}
             </div>
           </div>
         )}
@@ -275,7 +272,6 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                         </div>}
                       </div>
                       <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
-                        {/* 🔮 O FEITIÇO FOI SINCRONIZADO AQUI! */}
                         {ATTRS.map(a => {
                           const bv = (c.bonuses as any)[a.key] || 0;
                           return (
