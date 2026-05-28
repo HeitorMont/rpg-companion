@@ -567,9 +567,11 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                         </div>
                         {c.vigorMax > 0 && (
                           <div>
-                            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>⚡ {c.vigor}/{c.vigorMax}</div>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>
+                              {(c.bonuses as any).resourceName === "Mana" ? "💧" : "⚡"} {c.vigor}/{c.vigorMax}
+                            </div>
                             <div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}>
-                              <div style={{ background: "#3b82f6", width: `${Math.min(100, (c.vigor / c.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} />
+                              <div style={{ background: (c.bonuses as any).resourceName === "Mana" ? "#3b82f6" : "#f59e0b", width: `${Math.min(100, (c.vigor / c.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} />
                             </div>
                           </div>
                         )}

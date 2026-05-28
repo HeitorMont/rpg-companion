@@ -71,11 +71,25 @@ export default function CharEditor({char, owner, onSave, onCancel}: CharEditorPr
           <div><label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>NÍVEL</label>
           <input style={I} type="number" min="1" value={c.nivel} onChange={e => set("nivel",Math.max(1,parseInt(e.target.value)||1))}/></div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px"}}>
-          {[["hp","❤️ HP"],["hpMax","HP Máx"],["vigor","⚡ Vigor"],["vigorMax","Vigor Máx"]].map(([k,l]) => (
-            <div key={k}><label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>{l.toUpperCase()}</label>
-            <input style={I} type="number" value={c[k as keyof Character] as number} onChange={e => set(k as keyof Character,parseInt(e.target.value)||0)}/></div>
-          ))}
+        <div>
+          {/* 🔮 TRUQUE DE MESTRE: Botões de Escolha de Energia */}
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
+            <label style={{ color: "#9ca3af", fontSize: "11px", fontWeight: "bold" }}>ENERGIA:</label>
+            <button onClick={() => setC(p => ({...p, bonuses: {...p.bonuses, resourceName: "Vigor"} as any}))} style={{ flex: 1, background: (c.bonuses as any).resourceName === "Mana" ? "#111827" : "#f59e0b", color: (c.bonuses as any).resourceName === "Mana" ? "#64748b" : "#111", border: (c.bonuses as any).resourceName === "Mana" ? "1px solid #334155" : "none", borderRadius: "6px", padding: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "12px", transition: ".2s" }}>⚡ Vigor</button>
+            <button onClick={() => setC(p => ({...p, bonuses: {...p.bonuses, resourceName: "Mana"} as any}))} style={{ flex: 1, background: (c.bonuses as any).resourceName === "Mana" ? "#3b82f6" : "#111827", color: (c.bonuses as any).resourceName === "Mana" ? "#fff" : "#64748b", border: (c.bonuses as any).resourceName !== "Mana" ? "1px solid #334155" : "none", borderRadius: "6px", padding: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "12px", transition: ".2s" }}>💧 Mana</button>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px"}}>
+            {[
+              ["hp", "❤️ HP"],
+              ["hpMax", "MÁXIMO"],
+              ["vigor", (c.bonuses as any).resourceName === "Mana" ? "💧 MANA" : "⚡ VIGOR"],
+              ["vigorMax", "MÁXIMO"]
+            ].map(([k,l]) => (
+              <div key={k}><label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>{l}</label>
+              <input style={I} type="number" value={c[k as keyof Character] as number} onChange={e => set(k as keyof Character, parseInt(e.target.value)||0)}/></div>
+            ))}
+          </div>
         </div>
         <div>
           <label style={{color:"#f59e0b",fontSize:"13px",fontWeight:"bold",display:"block",marginBottom:"6px"}}>🎯 Bônus de Atributos</label>
