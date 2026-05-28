@@ -1,10 +1,8 @@
 // src/components/DiceRoller.tsx
-// ✅ CORREÇÃO: memo() impede re-render quando o pai (GameScreen) atualiza
-// estados não relacionados como `members` ou `tab`. Sem isso, qualquer ping
-// online (a cada 20s) causava re-render do roller mesmo com activeChar igual.
 import { useState, memo } from "react";
 import type { Character } from "../types";
 import { DICE, ATTRS, TC, TI, bc } from "../utils/constants";
+import { supabase } from "../lib/supabase";
 
 export const SkillPanel = memo(function SkillPanel({ char }: { char: Character | null | undefined }) {
   const [exp, setExp] = useState<string | null>(null);
@@ -33,17 +31,20 @@ export const SkillPanel = memo(function SkillPanel({ char }: { char: Character |
 
 interface DiceRollerProps {
   activeChar: Character | null | undefined;
+  lobbyId: string;
+  isMestre: boolean;
+  username: string;
 }
 
-// ✅ memo: se activeChar não mudar (mesma referência), o roller não re-renderiza.
-// A referência do char só muda quando o usuário edita/salva o personagem.
-const DiceRoller = memo(function DiceRoller({ activeChar }: DiceRollerProps) {
+const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, username }: DiceRollerProps) {
   const [num, setNum] = useState(1);
   const [dt, setDt] = useState(20);
   const [mb, setMb] = useState(0);
+  const [fb, setFb] = useState(0);
   const [atk, setAtk] = useState("none");
   const [rolling, setRolling] = useState(false);
   const [dispN, setDispN] = useState<number | null>(null);
+  const [dispRes, setDispRes] = useState<number[] | null>(null);
   const [lastR, setLastR] = useState<any>(null);
   const [hist, setHist] = useState<any[]>([]);
   const [showSkills, setShowSkills] = useState(false);
@@ -51,21 +52,49 @@ const DiceRoller = memo(function DiceRoller({ activeChar }: DiceRollerProps) {
   const doRoll = () => {
     if (rolling) return; setRolling(true); let i = 0;
     const iv = setInterval(() => {
-      setDispN(Math.floor(Math.random() * dt) + 1);
+      const fakeRes = Array.from({ length: num }, () => Math.floor(Math.random() * dt) + 1);
+      const sum = fakeRes.reduce((a, b) => a + b, 0);
+      const ab = activeChar && atk !== "none" ? ((activeChar.bonuses as any)?.[atk] || 0) : 0;
+      const bpdFinal = mb + ab, tbFinal = bpdFinal * num, total = sum + tbFinal + fb;
+      
+      setDispRes(fakeRes);
+      setDispN(total);
+      
       if (++i >= 10) {
         clearInterval(iv);
         const res = Array.from({ length: num }, () => Math.floor(Math.random() * dt) + 1);
-        const sum = res.reduce((a, b) => a + b, 0);
-        const ab = activeChar && atk !== "none" ? ((activeChar.bonuses as any)?.[atk] || 0) : 0;
-        const bpdFinal = mb + ab, tbFinal = bpdFinal * num, total = sum + tbFinal;
-        const r = { id: Date.now(), label: `${num}d${dt}`, res, mb, ab, bpd: bpdFinal, tb: tbFinal, num, total, attrL: atk !== "none" ? ATTRS.find(a => a.key === atk)?.short : null, isCrit: num === 1 && dt === 20 && res[0] === 20, isFail: num === 1 && dt === 20 && res[0] === 1, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) };
-        setLastR(r); setDispN(total); setHist(p => [r, ...p.slice(0, 14)]); setRolling(false);
+        const sumF = res.reduce((a, b) => a + b, 0);
+        const totalF = sumF + tbFinal + fb;
+        const attrL = atk !== "none" ? ATTRS.find(a => a.key === atk)?.short : null;
+        const isCrit = num === 1 && dt === 20 && res[0] === 20;
+        const isFail = num === 1 && dt === 20 && res[0] === 1;
+        
+        const r = { id: Date.now(), label: `${num}d${dt}`, res, mb, ab, fb, bpd: bpdFinal, tb: tbFinal, num, total: totalF, attrL: attrL, isCrit: isCrit, isFail: isFail, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) };
+        setLastR(r); setDispN(totalF); setDispRes(res); setHist(p => [r, ...p.slice(0, 14)]); setRolling(false);
+
+        if (!isMestre) {
+          supabase.channel(`mesa_rolls_${lobbyId}`).send({
+            type: "broadcast",
+            event: "new_roll",
+            payload: {
+              id: r.id,
+              charName: activeChar ? activeChar.name : username,
+              dice: `${num}d${dt}`,
+              res: res,
+              attr: attrL || "",
+              total: totalF,
+              bpd: bpdFinal, // 🔮 Agora ele envia o Bônus Por Dado separado!
+              fb: fb,        // 🔮 E o Bônus Fixo separado!
+              isCrit: isCrit,
+              isCritFail: isFail
+            }
+          });
+        }
       }
     }, 55);
   };
 
   const currentBpd = mb + (activeChar && atk !== "none" ? ((activeChar.bonuses as any)?.[atk] || 0) : 0);
-  const currentTb = currentBpd * num;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxWidth: "480px", margin: "0 auto" }}>
@@ -78,7 +107,7 @@ const DiceRoller = memo(function DiceRoller({ activeChar }: DiceRollerProps) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "6px" }}>
             <div><div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>❤️ {activeChar.hp}/{activeChar.hpMax}</div><div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}><div style={{ background: activeChar.hp / activeChar.hpMax > .5 ? "#22c55e" : activeChar.hp / activeChar.hpMax > .25 ? "#eab308" : "#ef4444", width: `${Math.min(100, (activeChar.hp / activeChar.hpMax) * 100)}%`, height: "100%", borderRadius: "4px" }} /></div></div>
-            {activeChar.vigorMax > 0 && <div><div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>⚡ {activeChar.vigor}/{activeChar.vigorMax}</div><div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}><div style={{ background: "#3b82f6", width: `${Math.min(100, (activeChar.vigor / activeChar.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} /></div></div>}
+            {activeChar.vigorMax > 0 && <div><div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>{(activeChar.bonuses as any)?.resourceName === "Mana" ? "💧" : "⚡"} {activeChar.vigor}/{activeChar.vigorMax}</div><div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}><div style={{ background: (activeChar.bonuses as any)?.resourceName === "Mana" ? "#3b82f6" : "#f59e0b", width: `${Math.min(100, (activeChar.vigor / activeChar.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} /></div></div>}
           </div>
           <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
             {ATTRS.map(a => <span key={a.key} style={{ background: "#0f172a", borderRadius: "4px", padding: "2px 5px", fontSize: "10px", color: bc((activeChar.bonuses as any)?.[a.key] || 0) }}>{a.short}: {((activeChar.bonuses as any)?.[a.key] || 0) >= 0 ? "+" : " "}{(activeChar.bonuses as any)?.[a.key] || 0}</span>)}
@@ -91,24 +120,34 @@ const DiceRoller = memo(function DiceRoller({ activeChar }: DiceRollerProps) {
           {DICE.map(d => <button key={d} onClick={() => setDt(d)} style={{ background: dt === d ? "#f59e0b" : "#111827", color: dt === d ? "#111" : "#e2e8f0", border: `2px solid ${dt === d ? "#f59e0b" : "#374151"}`, borderRadius: "8px", padding: "7px 10px", cursor: "pointer", fontWeight: "bold", fontSize: "13px", minWidth: "44px" }}>d{d}</button>)}
         </div>
       </div>
-      <div style={{ background: "#1e293b", borderRadius: "10px", padding: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+      
+      <div style={{ background: "#1e293b", borderRadius: "10px", padding: "12px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
         <div>
           <label style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>Nº DADOS</label>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
-            <button onClick={() => setNum(n => Math.max(1, n - 1))} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "30px", height: "30px", cursor: "pointer", fontSize: "16px" }}>−</button>
-            <span style={{ fontSize: "20px", fontWeight: "bold", minWidth: "24px", textAlign: "center" }}>{num}</span>
-            <button onClick={() => setNum(n => Math.min(20, n + 1))} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "30px", height: "30px", cursor: "pointer", fontSize: "16px" }}>+</button>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+            <button onClick={() => setNum(n => Math.max(1, n - 1))} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>−</button>
+            <span style={{ fontSize: "16px", fontWeight: "bold", minWidth: "22px", textAlign: "center" }}>{num}</span>
+            <button onClick={() => setNum(n => Math.min(20, n + 1))} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>+</button>
           </div>
         </div>
         <div>
           <label style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>BÔNUS/DADO</label>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
-            <button onClick={() => setMb(n => n - 1)} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "30px", height: "30px", cursor: "pointer", fontSize: "16px" }}>−</button>
-            <span style={{ fontSize: "18px", fontWeight: "bold", minWidth: "30px", textAlign: "center", color: bc(mb) }}>{mb >= 0 ? "+" : " "}{mb}</span>
-            <button onClick={() => setMb(n => n + 1)} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "30px", height: "30px", cursor: "pointer", fontSize: "16px" }}>+</button>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+            <button onClick={() => setMb(n => n - 1)} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>−</button>
+            <span style={{ fontSize: "16px", fontWeight: "bold", minWidth: "26px", textAlign: "center", color: bc(mb) }}>{mb >= 0 ? "+" : ""}{mb}</span>
+            <button onClick={() => setMb(n => n + 1)} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>+</button>
+          </div>
+        </div>
+        <div>
+          <label style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>BÔNUS FIXO</label>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+            <button onClick={() => setFb(n => n - 1)} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>−</button>
+            <span style={{ fontSize: "16px", fontWeight: "bold", minWidth: "26px", textAlign: "center", color: bc(fb) }}>{fb >= 0 ? "+" : ""}{fb}</span>
+            <button onClick={() => setFb(n => n + 1)} style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", color: "#e2e8f0", width: "28px", height: "28px", cursor: "pointer", fontSize: "16px" }}>+</button>
           </div>
         </div>
       </div>
+      
       {activeChar && (
         <div style={{ background: "#1e293b", borderRadius: "10px", padding: "12px" }}>
           <label style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold" }}>ATRIBUTO (bônus/dado)</label>
@@ -123,17 +162,34 @@ const DiceRoller = memo(function DiceRoller({ activeChar }: DiceRollerProps) {
         </div>
       )}
       <div style={{ background: "#1e293b", borderRadius: "12px", padding: "16px", textAlign: "center" }}>
-        <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "2px" }}>
-          {num}d{dt}{currentBpd !== 0 && <span style={{ color: currentBpd >= 0 ? "#4ade80" : "#f87171" }}> ({currentBpd >= 0 ? "+" : ""}{currentBpd} × {num} = {currentTb >= 0 ? "+" : ""}{currentTb})</span>}
+        {/* 🔮 Atualização: Exibição moderna com os colchetes */}
+        <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "2px", display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "2px" }}>
+          <span>{num}d{dt}</span>
+          {currentBpd !== 0 && <span style={{ color: currentBpd >= 0 ? "#4ade80" : "#f87171" }}>[{currentBpd >= 0 ? "+" : ""}{currentBpd} /dado]</span>}
+          {fb !== 0 && <span style={{ color: fb >= 0 ? "#a855f7" : "#f87171" }}>[{fb >= 0 ? "+" : ""}{fb} Fixo]</span>}
         </div>
-        <div style={{ fontSize: dispN !== null && String(dispN).length > 3 ? "50px" : "68px", fontWeight: "bold", fontFamily: "Georgia", minHeight: "84px", display: "flex", alignItems: "center", justifyContent: "center", color: lastR?.isCrit ? "#fbbf24" : lastR?.isFail ? "#ef4444" : "#f1f5f9", textShadow: lastR?.isCrit ? "0 0 24px #fbbf24" : "none" }}>
+        
+        {num > 1 && dispRes && (
+          <div style={{ fontSize: "15px", color: "#cbd5e1", fontWeight: "bold", fontFamily: "monospace", margin: "8px 0" }}>
+            [ {dispRes.join(" + ")} ]
+          </div>
+        )}
+
+        <div style={{ fontSize: dispN !== null && String(dispN).length > 3 ? "50px" : "68px", fontWeight: "bold", fontFamily: "Georgia", minHeight: "84px", display: "flex", alignItems: "center", justifyContent: "center", color: lastR?.isCrit && !rolling ? "#fbbf24" : lastR?.isFail && !rolling ? "#ef4444" : "#f1f5f9", textShadow: lastR?.isCrit && !rolling ? "0 0 24px #fbbf24" : "none" }}>
           {dispN !== null ? dispN : "—"}
         </div>
         {lastR && !rolling && (
           <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "10px" }}>
             {lastR.isCrit && <div style={{ color: "#fbbf24", fontWeight: "bold" }}>⭐ CRÍTICO! ⭐</div>}
             {lastR.isFail && <div style={{ color: "#ef4444", fontWeight: "bold" }}>💀 FALHA CRÍTICA!</div>}
-            <div>[{lastR.res.join(", ")}]{lastR.bpd !== 0 && ` +(${lastR.bpd}×${lastR.num}=${lastR.tb})`}</div>
+            
+            {/* 🔮 O detalhamento da rolagem pós-resultado usando o novo padrão */}
+            {(lastR.bpd !== 0 || lastR.fb !== 0) && (
+              <div style={{ display: "flex", justifyContent: "center", gap: "4px", marginTop: "4px" }}>
+                {lastR.bpd !== 0 && <span style={{ color: lastR.bpd >= 0 ? "#4ade80" : "#f87171" }}>[{lastR.bpd >= 0 ? "+" : ""}{lastR.bpd} /dado]</span>}
+                {lastR.fb !== 0 && <span style={{ color: lastR.fb >= 0 ? "#a855f7" : "#fca5a5" }}>[{lastR.fb >= 0 ? "+" : ""}{lastR.fb} Fixo]</span>}
+              </div>
+            )}
           </div>
         )}
         <button onClick={doRoll} disabled={rolling} style={{ background: rolling ? "#374151" : "#f59e0b", color: rolling ? "#64748b" : "#111", border: "none", borderRadius: "10px", padding: "12px", fontSize: "17px", fontWeight: "bold", cursor: rolling ? "not-allowed" : "pointer", width: "100%", boxShadow: rolling ? "none" : "0 4px 14px #f59e0b55" }}>
@@ -153,11 +209,17 @@ const DiceRoller = memo(function DiceRoller({ activeChar }: DiceRollerProps) {
         <div style={{ background: "#1e293b", borderRadius: "10px", padding: "12px" }}>
           <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold", marginBottom: "6px" }}>HISTÓRICO</div>
           {hist.map((r, i) => (
-            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 6px", borderRadius: "6px", background: i === 0 ? "#111827" : "transparent", marginBottom: "2px", opacity: Math.max(.4, 1 - i * .06) }}>
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 6px", borderRadius: "6px", background: i === 0 ? "#111827" : "transparent", marginBottom: "2px", opacity: Math.max(.4, 1 - i * .06), flexWrap: "wrap" }}>
               <span style={{ fontSize: "11px", color: "#475569", minWidth: "34px" }}>{r.time}</span>
               <span style={{ fontSize: "12px", color: "#94a3b8" }}>{r.label}</span>
+              
+              {r.num > 1 && <span style={{ fontSize: "12px", color: "#cbd5e1", fontFamily: "monospace" }}>[{r.res.join(", ")}]</span>}
               {r.attrL && <span style={{ fontSize: "11px", color: "#60a5fa" }}>({r.attrL})</span>}
-              {r.bpd !== 0 && <span style={{ fontSize: "11px", color: "#64748b" }}>{r.bpd >= 0 ? "+" : ""}{r.bpd}×{r.num}</span>}
+              
+              {/* 🔮 O novo formato aplicado no histórico */}
+              {r.bpd !== 0 && <span style={{ fontSize: "11px", color: "#64748b" }} title={`Total extra dos dados: ${r.tb >= 0 ? "+" : ""}${r.tb}`}>[{r.bpd >= 0 ? "+" : ""}{r.bpd} /dado]</span>}
+              {r.fb !== 0 && <span style={{ fontSize: "11px", color: "#a855f7" }} title="Bônus Fixo">[{r.fb >= 0 ? "+" : ""}{r.fb} Fixo]</span>}
+              
               <span style={{ marginLeft: "auto", fontWeight: "bold", fontSize: "16px", color: r.isCrit ? "#fbbf24" : r.isFail ? "#ef4444" : "#f1f5f9" }}>{r.total}</span>
             </div>
           ))}

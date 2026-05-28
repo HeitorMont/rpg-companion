@@ -7,6 +7,7 @@ import CharEditor from "./CharEditor";
 import DiceRoller from "./DiceRoller";
 import CharacterList from "./CharacterList";
 import SessionPanel from "./SessionPanel";
+import GlobalRollLog from "./GlobalRollLog"; // 🔮 Importando o nosso painel fantasma de rolagens
 import { PAL } from "../utils/constants";
 
 /* ── Canvas Toolbar ──────────────────────────────────────────────────────────── */
@@ -206,6 +207,9 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         <canvas ref={cv.drawRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
         <canvas ref={cv.fgRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
       </div>
+
+      {/* 🔮 O NOSSO LOG FLUTUANTE DOS DADOS */}
+      <GlobalRollLog lobbyId={lobby.id} />
     </div>
   );
 
@@ -242,11 +246,15 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       </div>
 
       <div style={{ flex: 1, overflowY: isCanvas ? "hidden" : "auto", padding: isCanvas ? "0" : "14px", display: isCanvas ? "flex" : "block", flexDirection: "column" }}>
-        {tab === "dados" && <DiceRoller activeChar={activeChar} />}
+        {/* 🔮 Atualizado para entregar os dados ao transmissor */}
+        {tab === "dados" && <DiceRoller activeChar={activeChar} lobbyId={lobby.id} isMestre={isMestre} username={user.username} />}
+        
         {tab === "personagens" && (
           <CharacterList chars={chars} member={member} user={user} isMestre={isMestre} onDeleteChar={onDeleteChar} onEditChar={handleEditChar} />
         )}
+        
         {isCanvas && canvasPanelJSX}
+        
         {tab === "sessao" && (
           <SessionPanel lobby={lobby} member={member} user={user} chars={chars} members={members} isAnotherMasterActive={isAnotherMasterActive} onSwitchRole={handleSwitchRoleInsideGame} onLeave={onLeave} />
         )}
