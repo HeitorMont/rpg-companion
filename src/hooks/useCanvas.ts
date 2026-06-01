@@ -881,7 +881,7 @@ export function useCanvas(lobbyId: string, isMestre: boolean, tab: string) {
     tool, setTool, color, setColor, brush, setBrush,
     linhas, setLinhas, images, setImages, selImg, setSelImg, selBox,
     bgRef, drawRef, fgRef, contRef, fileRef, clearCv, loadImg, onDown, onMove, onUp,
-    zoom, panX, panY,
+    zoom, setZoom, panX, panY, // 🔮 CORREÇÃO: Adicionamos o setZoom aqui!
     showGrid, setShowGrid,
     deleteSelectedImages 
   };
