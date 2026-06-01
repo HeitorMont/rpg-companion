@@ -7,22 +7,21 @@ import LobbyBrowser from "./components/LobbyBrowser";
 import RoleSelect from "./components/RoleSelect";
 import GameScreen from "./components/GameScreen";
 import CharEditor from "./components/CharEditor";
- 
+import { isSessionValid } from "./utils/security";
+
 export default function App() {
   const [screen, setScreen] = useState("loading");
-  const [user, setUser] = useState<User | null>(null);
-  const [lobby, setLobby] = useState<Lobby | null>(null);
+  const [user, setUser]     = useState<User | null>(null);
+  const [lobby, setLobby]   = useState<Lobby | null>(null);
   const [member, setMember] = useState<Member | null>(null);
-  const [chars, setChars] = useState<Character[]>([]);
+  const [chars, setChars]   = useState<Character[]>([]);
   const [creatingChar, setCreatingChar] = useState(false);
- 
-  // ✅ CORREÇÃO: useCallback evita recriar a função a cada render,
-  // impedindo que saveChar/deleteChar atualizem a referência em filhos memoizados.
+
   const loadChars = useCallback(async (uname: string, pwHash: string) => {
     try {
       const { data: loaded, error } = await supabase.rpc("buscar_meus_personagens", {
         p_username: uname,
-        p_pwhash: pwHash,
+        p_pwhash:   pwHash,
       });
       if (error) throw error;
       if (loaded) {
@@ -39,17 +38,31 @@ export default function App() {
       console.error("Erro ao buscar personagens:", e);
       setChars([]);
     }
-  }, []); // sem dependências: função estável para sempre
- 
+  }, []);
+
+  // ── Restauração de sessão ─────────────────────────────────────────────────
+
   useEffect(() => {
     (async () => {
       try {
-        const s = await window.storage.get("rpg_sess");
-        if (s) {
-          const u = JSON.parse(s.value);
-          if (u?.username && u?.pwHash) {
-            setUser(u);
-            await loadChars(u.username, u.pwHash);
+        const raw = await window.storage.get("rpg_sess");
+        if (raw) {
+          const parsed = JSON.parse(raw.value);
+
+          // ✅ NOVO: verifica expiração antes de restaurar.
+          // Sessões antigas (sem expiresAt) são tratadas como expiradas.
+          if (!isSessionValid(parsed)) {
+            // Limpa sessão expirada silenciosamente e vai para login
+            await window.storage.delete("rpg_sess");
+            await window.storage.delete("rpg_cur");
+            setScreen("login");
+            return;
+          }
+
+          const { username, pwHash } = parsed;
+          if (username && pwHash) {
+            setUser({ username, pwHash, createdAt: 0 });
+            await loadChars(username, pwHash);
             try {
               const cr = await window.storage.get("rpg_cur");
               if (cr) {
@@ -68,14 +81,12 @@ export default function App() {
           }
         }
       } catch (e) {
-        console.error("Erro na restauração automática de sessão:", e);
+        console.error("Erro na restauração de sessão:", e);
       }
       setScreen("login");
     })();
   }, [loadChars]);
- 
-  // ✅ CORREÇÃO: saveChar memoizado. Sem isso, qualquer re-render de App recria
-  // esta função e invalida React.memo em GameScreen/LobbyBrowser.
+
   const saveChar = useCallback(async (c: Character) => {
     if (!user) return;
     const ch = { ...c, owner: user.username };
@@ -94,8 +105,7 @@ export default function App() {
       alert("⚠️ A conexão falhou. Suas últimas alterações no personagem não foram salvas.");
     }
   }, [user, loadChars]);
- 
-  // ✅ CORREÇÃO: deleteChar memoizado pelo mesmo motivo.
+
   const deleteChar = useCallback(async (id: string) => {
     if (!user) return;
     setChars(p => p.filter(c => c.id !== id));
@@ -110,7 +120,7 @@ export default function App() {
       alert("⚠️ Erro de conexão. O personagem não pôde ser apagado do servidor.");
     }
   }, [user, loadChars]);
- 
+
   const logout = useCallback(async () => {
     try { await window.storage.delete("rpg_sess"); } catch {}
     if (member && lobby) {
@@ -121,30 +131,36 @@ export default function App() {
     }
     setUser(null); setLobby(null); setMember(null); setChars([]); setScreen("login");
   }, [member, lobby]);
- 
+
+  // ── Screens ───────────────────────────────────────────────────────────────
+
   if (screen === "loading") return (
     <div style={{ minHeight: "100vh", background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center", color: "#f59e0b", fontSize: "40px" }}>🎲</div>
   );
- 
+
   if (creatingChar) return (
     <div style={{ background: "#0f172a", minHeight: "100vh", padding: "20px", fontFamily: "'Segoe UI',sans-serif" }}>
       <button onClick={() => setCreatingChar(false)} style={{ background: "transparent", color: "#64748b", border: "none", cursor: "pointer", marginBottom: "16px", fontSize: "14px" }}>← Voltar</button>
       <CharEditor char={null} owner={user?.username || ""} onSave={async c => { await saveChar(c); setCreatingChar(false); }} onCancel={() => setCreatingChar(false)} />
     </div>
   );
- 
+
   if (screen === "login") return (
-    <LoginScreen onLogin={async u => { setUser(u); await loadChars(u.username, u.pwHash); setScreen("lobbies"); }} />
+    <LoginScreen onLogin={async u => {
+      setUser(u);
+      await loadChars(u.username, u.pwHash);
+      setScreen("lobbies");
+    }} />
   );
- 
+
   if (screen === "lobbies" && user) return (
     <LobbyBrowser user={user} chars={chars} onEnterLobby={l => { setLobby(l); setScreen("role"); }} onLogout={logout} onSaveChar={saveChar} onDeleteChar={deleteChar} />
   );
- 
+
   if (screen === "role" && user && lobby) return (
     <RoleSelect user={user} lobby={lobby} chars={chars} onJoin={m => { setMember(m); setScreen("game"); }} onCreateChar={() => setCreatingChar(true)} onBack={() => setScreen("lobbies")} />
   );
- 
+
   if (screen === "game" && user && lobby && member) return (
     <GameScreen
       user={user} lobby={lobby} member={member} chars={chars}
@@ -159,7 +175,6 @@ export default function App() {
       onSaveChar={saveChar} onDeleteChar={deleteChar} onUpdateMember={setMember}
     />
   );
- 
+
   return null;
 }
- 

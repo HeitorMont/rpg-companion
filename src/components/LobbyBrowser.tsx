@@ -1,10 +1,17 @@
 // src/components/LobbyBrowser.tsx
+// Mudanças de segurança:
+//   - validateLobbyName antes de criar lobby
+//   - isValidLobbyId antes de qualquer operação no Storage (previne path traversal)
+//   - sanitize no nome do lobby antes de exibir
+//   - hashPw de lobby ainda usa o legado síncrono (compatibilidade),
+//     mas com validação de entrada antes de qualquer chamada ao banco
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { User, Lobby, Character } from "../types";
 import { supabase } from "../lib/supabase";
-import { hashPw } from "./LoginScreen";
+import { hashPw } from "./LoginScreen"; // hash síncrono para senhas de lobby
 import CharEditor from "./CharEditor";
 import { ATTRS, I, bc } from "../utils/constants";
+import { validateLobbyName, isValidLobbyId, sanitize } from "../utils/security";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -68,8 +75,6 @@ function LobbyCard({ l, isOwner, activity, joinPw, onJoinPwChange, onJoin, onDel
 
   return (
     <div style={{ background: "#1e293b", border: `1.5px solid ${borderColor}`, borderRadius: "14px", overflow: "hidden", marginBottom: "10px" }}>
-
-      {/* Barra de status */}
       <div style={{ background: topBarBg, borderBottom: `1px solid ${topBarBorder}`, padding: "8px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: statusColor, boxShadow: isActive ? `0 0 7px ${statusColor}` : "none", flexShrink: 0 }} />
@@ -92,20 +97,19 @@ function LobbyCard({ l, isOwner, activity, joinPw, onJoinPwChange, onJoin, onDel
           )}
         </div>
       </div>
-
-      {/* Corpo */}
       <div style={{ padding: "12px 14px" }}>
         {delConfirm ? (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ color: "#f87171", flex: 1, fontSize: "13px" }}>Dissipar permanentemente <strong>{l.name}</strong>?</span>
+            {/* sanitize() garante que o nome não injete HTML no DOM */}
+            <span style={{ color: "#f87171", flex: 1, fontSize: "13px" }}>Dissipar permanentemente <strong>{sanitize(l.name)}</strong>?</span>
             <button onClick={() => { onDelete(); setDelConfirm(false); }} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Sim</button>
             <button onClick={() => setDelConfirm(false)} style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "12px" }}>Não</button>
           </div>
         ) : (
           <>
-            <div style={{ fontWeight: "bold", fontSize: "16px", color: "#f1f5f9", marginBottom: "2px" }}>{l.name}</div>
+            <div style={{ fontWeight: "bold", fontSize: "16px", color: "#f1f5f9", marginBottom: "2px" }}>{sanitize(l.name)}</div>
             <div style={{ fontSize: "11px", color: "#475569", marginBottom: "10px" }}>
-              {isOwner ? "Sua mesa" : `por ${l.ownerId}`} · {tempoRelativo(l.createdAt)}
+              {isOwner ? "Sua mesa" : `por ${sanitize(l.ownerId)}`} · {tempoRelativo(l.createdAt)}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "12px", flexWrap: "wrap" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 8px", borderRadius: "7px", fontSize: "11px", fontWeight: "bold", background: hasMestre ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.03)", color: hasMestre ? "#f59e0b" : "#475569", border: `1px solid ${hasMestre ? "rgba(245,158,11,0.25)" : "#334155"}` }}>👑 {activity.mestres}</span>
@@ -116,7 +120,7 @@ function LobbyCard({ l, isOwner, activity, joinPw, onJoinPwChange, onJoin, onDel
               {isActive && <span style={{ marginLeft: "auto", fontSize: "11px", color: "#22c55e", fontWeight: "bold" }}>{activity.total} online</span>}
             </div>
             {!l.isPublic && !isOwner && (
-              <input type="password" style={{ ...I, padding: "7px 10px", fontSize: "13px", marginBottom: "10px" }} value={joinPw} onChange={e => onJoinPwChange(e.target.value)} placeholder="Senha de acesso" />
+              <input type="password" style={{ ...I, padding: "7px 10px", fontSize: "13px", marginBottom: "10px" }} value={joinPw} onChange={e => onJoinPwChange(e.target.value)} placeholder="Senha de acesso" maxLength={72} />
             )}
             <button onClick={onJoin} style={{ width: "100%", background: isOwner ? "rgba(245,158,11,0.1)" : isActive ? "rgba(59,130,246,0.1)" : "#111827", color: isOwner ? "#f59e0b" : isActive ? "#60a5fa" : "#94a3b8", border: `1px solid ${isOwner ? "rgba(245,158,11,0.3)" : isActive ? "rgba(59,130,246,0.3)" : "#334155"}`, borderRadius: "8px", padding: "9px", fontWeight: "bold", cursor: "pointer", fontSize: "13px" }}>
               {isOwner ? "Iniciar Sessão (Mestre) →" : "Entrar na Mesa →"}
@@ -131,18 +135,12 @@ function LobbyCard({ l, isOwner, activity, joinPw, onJoinPwChange, onJoin, onDel
 // ── Paginação ─────────────────────────────────────────────────────────────────
 
 interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  onPrev: () => void;
-  onNext: () => void;
-  onPage: (p: number) => void;
+  currentPage: number; totalPages: number; totalItems: number;
+  onPrev: () => void; onNext: () => void; onPage: (p: number) => void;
 }
 
 function Pagination({ currentPage, totalPages, totalItems, onPrev, onNext, onPage }: PaginationProps) {
   if (totalPages <= 1) return null;
-
-  // Gera a lista de páginas a exibir (máx 5 botões, com reticências)
   const pages: (number | "...")[] = [];
   if (totalPages <= 5) {
     for (let i = 1; i <= totalPages; i++) pages.push(i);
@@ -153,26 +151,24 @@ function Pagination({ currentPage, totalPages, totalItems, onPrev, onNext, onPag
     if (currentPage < totalPages - 2) pages.push("...");
     pages.push(totalPages);
   }
-
-  const btnBase: React.CSSProperties = { background: "transparent", border: "1px solid #334155", borderRadius: "7px", color: "#94a3b8", cursor: "pointer", fontSize: "12px", padding: "5px 9px", minWidth: "32px", textAlign: "center" as const };
-  const btnActive: React.CSSProperties = { ...btnBase, background: "#f59e0b", border: "1px solid #f59e0b", color: "#111", fontWeight: "bold" };
-  const btnDisabled: React.CSSProperties = { ...btnBase, opacity: 0.3, cursor: "not-allowed" };
-
+  const btn: React.CSSProperties = { background: "transparent", border: "1px solid #334155", borderRadius: "7px", color: "#94a3b8", cursor: "pointer", fontSize: "12px", padding: "5px 9px", minWidth: "32px", textAlign: "center" as const };
+  const btnA: React.CSSProperties = { ...btn, background: "#f59e0b", border: "1px solid #f59e0b", color: "#111", fontWeight: "bold" };
+  const btnD: React.CSSProperties = { ...btn, opacity: 0.3, cursor: "not-allowed" };
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px" }}>
       <span style={{ fontSize: "11px", color: "#475569" }}>
         {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, totalItems)}–{Math.min(currentPage * ITEMS_PER_PAGE, totalItems)} de {totalItems}
       </span>
       <div style={{ display: "flex", gap: "4px" }}>
-        <button onClick={onPrev} disabled={currentPage === 1} style={currentPage === 1 ? btnDisabled : btnBase}>‹</button>
+        <button onClick={onPrev} disabled={currentPage === 1} style={currentPage === 1 ? btnD : btn}>‹</button>
         {pages.map((p, i) =>
           p === "..." ? (
-            <span key={`dots-${i}`} style={{ padding: "5px 4px", fontSize: "12px", color: "#475569" }}>…</span>
+            <span key={`d${i}`} style={{ padding: "5px 4px", fontSize: "12px", color: "#475569" }}>…</span>
           ) : (
-            <button key={p} onClick={() => onPage(p as number)} style={p === currentPage ? btnActive : btnBase}>{p}</button>
+            <button key={p} onClick={() => onPage(p as number)} style={p === currentPage ? btnA : btn}>{p}</button>
           )
         )}
-        <button onClick={onNext} disabled={currentPage === totalPages} style={currentPage === totalPages ? btnDisabled : btnBase}>›</button>
+        <button onClick={onNext} disabled={currentPage === totalPages} style={currentPage === totalPages ? btnD : btn}>›</button>
       </div>
     </div>
   );
@@ -191,13 +187,11 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
   const [activityPerLobby, setActivityPerLobby] = useState<Record<string, LobbyActivity>>({});
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
-  // Criação
   const [showCreation, setShowCreation] = useState(false);
   const [newLobbyName, setNewLobbyName] = useState("");
   const [newLobbyPw, setNewLobbyPw]     = useState("");
   const [isPublic, setIsPublic]           = useState(true);
 
-  // ── Busca, filtros e ordenação ──
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType]   = useState<FilterType>("todas");
   const [sortBy, setSortBy]           = useState<SortType>("atividade");
@@ -207,12 +201,9 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
   const [err, setErr]       = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Personagens
   const [editChar, setEditChar] = useState<Character | null>(null);
   const [showCE, setShowCE]     = useState(false);
   const [delC, setDelC]         = useState<string | null>(null);
-
-  // ── Reset de página ao mudar busca/filtro/ordenação ──────────────────────
 
   useEffect(() => { setCurrentPage(1); }, [searchQuery, filterType, sortBy]);
 
@@ -245,9 +236,9 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
           if (!grouped[m.lobby_id]) grouped[m.lobby_id] = { total: 0, mestres: 0, jogadores: 0, espectadores: 0, nomes: [] };
           const g = grouped[m.lobby_id];
           g.total++;
-          if (m.role === "mestre")          g.mestres++;
-          else if (m.role === "jogador")     g.jogadores++;
-          else if (m.role === "espectador")  g.espectadores++;
+          if (m.role === "mestre")           g.mestres++;
+          else if (m.role === "jogador")      g.jogadores++;
+          else if (m.role === "espectador")   g.espectadores++;
           g.nomes.push(m.username);
         });
         setActivityPerLobby(grouped);
@@ -261,56 +252,55 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
     return () => clearInterval(iv);
   }, [fetchLobbies]);
 
-  // ── Lógica de filtro + ordenação (client-side, sem chamada extra ao banco) ─
+  // ── Filtro + ordenação ─────────────────────────────────────────────────────
 
   const myLobbies = useMemo(
     () => lobbies.filter(l => l.ownerId === user.username),
     [lobbies, user.username]
   );
 
-  // Aplica busca → filtro → ordenação sobre os lobbies de terceiros
   const filteredOtherLobbies = useMemo(() => {
     let result = lobbies.filter(l => l.ownerId !== user.username);
-
-    // Busca: nome ou dono
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(l =>
-        l.name.toLowerCase().includes(q) ||
-        l.ownerId.toLowerCase().includes(q)
-      );
+      result = result.filter(l => l.name.toLowerCase().includes(q) || l.ownerId.toLowerCase().includes(q));
     }
-
-    // Filtro de tipo
     if (filterType === "ativas")   result = result.filter(l => (activityPerLobby[l.id]?.total ?? 0) > 0);
     if (filterType === "publicas") result = result.filter(l => l.isPublic);
     if (filterType === "privadas") result = result.filter(l => !l.isPublic);
-
-    // Ordenação
     if (sortBy === "atividade") result = [...result].sort((a, b) => (activityPerLobby[b.id]?.total ?? 0) - (activityPerLobby[a.id]?.total ?? 0));
     if (sortBy === "nome")      result = [...result].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
     if (sortBy === "recente")   result = [...result].sort((a, b) => b.createdAt - a.createdAt);
-
     return result;
   }, [lobbies, user.username, searchQuery, filterType, sortBy, activityPerLobby]);
 
-  const totalPages        = Math.ceil(filteredOtherLobbies.length / ITEMS_PER_PAGE);
-  const paginatedLobbies  = filteredOtherLobbies.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
-  const totalAtivos = Object.values(activityPerLobby).reduce((acc, a) => acc + a.total, 0);
+  const totalPages       = Math.ceil(filteredOtherLobbies.length / ITEMS_PER_PAGE);
+  const paginatedLobbies = filteredOtherLobbies.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalAtivos      = Object.values(activityPerLobby).reduce((acc, a) => acc + a.total, 0);
 
   // ── Criar lobby ───────────────────────────────────────────────────────────
 
   const handleCreateLobby = async () => {
     setErr("");
-    if (!newLobbyName.trim()) { setErr("Dê um nome à sua mesa de jogo."); return; }
+
+    // ✅ NOVO: valida nome com regras centralizadas antes de qualquer chamada ao banco
+    const nameValidation = validateLobbyName(newLobbyName);
+    if (!nameValidation.ok) { setErr(nameValidation.message!); return; }
     if (!isPublic && !newLobbyPw.trim()) { setErr("Salas privadas exigem uma senha."); return; }
+    if (!isPublic && newLobbyPw.length > 72) { setErr("Senha muito longa."); return; }
+
     setLoading(true);
     const lobbyId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
     try {
-      const { error } = await supabase.from("lobbies").insert([{ id: lobbyId, name: newLobbyName.trim(), pw_hash: isPublic ? null : hashPw(newLobbyPw), owner_id: user.username, is_public: isPublic, created_at: Date.now() }]);
+      const { error } = await supabase.from("lobbies").insert([{
+        id:         lobbyId,
+        name:       sanitize(newLobbyName.trim()), // ✅ sanitize antes de gravar
+        pw_hash:    isPublic ? null : hashPw(newLobbyPw),
+        owner_id:   user.username,
+        is_public:  isPublic,
+        created_at: Date.now(),
+      }]);
       if (error) throw error;
       setNewLobbyName(""); setNewLobbyPw(""); setIsPublic(true); setShowCreation(false);
       await fetchLobbies();
@@ -322,9 +312,19 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
 
   const handleDeleteLobby = async (id: string) => {
     setErr("");
+
+    // ✅ NOVO: valida o formato do ID antes de usar em caminhos de Storage.
+    // Previne path traversal: se id fosse "../outro-lobby", deletaria arquivos errados.
+    if (!isValidLobbyId(id)) {
+      setErr("ID de lobby inválido.");
+      return;
+    }
+
     try {
       const { data: files } = await supabase.storage.from("canvas_images").list(id);
-      if (files?.length) await supabase.storage.from("canvas_images").remove(files.map(f => `${id}/${f.name}`));
+      if (files?.length) {
+        await supabase.storage.from("canvas_images").remove(files.map(f => `${id}/${f.name}`));
+      }
       const { error } = await supabase.from("lobbies").delete().eq("id", id);
       if (error) throw error;
       await fetchLobbies();
@@ -336,7 +336,9 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
   const handleJoinLobby = (lob: Lobby) => {
     setErr("");
     if (!lob.isPublic && lob.ownerId !== user.username) {
-      if (hashPw(joinPw[lob.id] || "") !== lob.pwHash) { setErr(`Senha incorreta para: ${lob.name}`); return; }
+      const inputPw = joinPw[lob.id] || "";
+      if (!inputPw) { setErr("Digite a senha para entrar nesta sala."); return; }
+      if (hashPw(inputPw) !== lob.pwHash) { setErr(`Senha incorreta para: ${sanitize(lob.name)}`); return; }
     }
     onEnterLobby(lob);
   };
@@ -354,12 +356,10 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
 
   return (
     <div style={{ background: "#0f172a", minHeight: "100vh", color: "#e2e8f0", fontFamily: "'Segoe UI',sans-serif" }}>
-
-      {/* Header */}
       <div style={{ background: "#1e293b", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #334155" }}>
         <div>
           <div style={{ fontSize: "11px", color: "#64748b", fontWeight: "bold", letterSpacing: "0.5px" }}>LOGADO COMO</div>
-          <div style={{ fontWeight: "bold", color: "#f59e0b", fontSize: "16px" }}>🧙‍♂️ {user.username}</div>
+          <div style={{ fontWeight: "bold", color: "#f59e0b", fontSize: "16px" }}>🧙‍♂️ {sanitize(user.username)}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {totalAtivos > 0 && (
@@ -372,7 +372,6 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: "flex", background: "#111827", borderBottom: "2px solid #1e293b" }}>
         <button onClick={() => setSubTab("lobbies")} style={{ flex: 1, padding: "14px", background: "none", border: "none", borderBottom: subTab === "lobbies" ? "3px solid #f59e0b" : "3px solid transparent", color: subTab === "lobbies" ? "#f59e0b" : "#64748b", cursor: "pointer", fontWeight: "bold" }}>🌐 Lobbies Ativos</button>
         <button onClick={() => setSubTab("chars")} style={{ flex: 1, padding: "14px", background: "none", border: "none", borderBottom: subTab === "chars" ? "3px solid #f59e0b" : "3px solid transparent", color: subTab === "chars" ? "#f59e0b" : "#64748b", cursor: "pointer", fontWeight: "bold" }}>⚔️ Personagens ({chars.length})</button>
@@ -381,11 +380,8 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
       <div style={{ maxWidth: "560px", margin: "0 auto", padding: "20px" }}>
         {err && <div style={{ color: "#f87171", fontSize: "13px", padding: "10px", background: "#1c0a0a", borderRadius: "6px", marginBottom: "14px" }}>⚠️ {err}</div>}
 
-        {/* ── ABA: LOBBIES ── */}
         {subTab === "lobbies" && (
           <div style={{ display: "grid", gap: "16px" }}>
-
-            {/* ── Formulário colapsável ── */}
             <div style={{ background: "#1e293b", borderRadius: "12px", overflow: "hidden", border: "1px solid #334155" }}>
               <button onClick={() => setShowCreation(v => !v)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", color: "#f59e0b" }}>
                 <span style={{ fontWeight: "bold", fontFamily: "Georgia", fontSize: "15px" }}>✨ Conjurar Nova Mesa</span>
@@ -394,12 +390,12 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
               {showCreation && (
                 <div style={{ padding: "0 16px 16px", display: "grid", gap: "12px", borderTop: "1px solid #334155" }}>
                   <div style={{ height: "12px" }} />
-                  <input style={I} value={newLobbyName} onChange={e => setNewLobbyName(e.target.value)} placeholder="Nome do Lobby / Campanha" />
+                  <input style={I} value={newLobbyName} onChange={e => setNewLobbyName(e.target.value)} placeholder="Nome do Lobby / Campanha" maxLength={40} />
                   <div style={{ display: "flex", gap: "10px" }}>
                     <button onClick={() => setIsPublic(true)} style={{ flex: 1, padding: "8px", borderRadius: "6px", border: "none", background: isPublic ? "#f59e0b" : "#111827", color: isPublic ? "#111" : "#64748b", fontWeight: "bold", cursor: "pointer" }}>🔓 Pública</button>
                     <button onClick={() => setIsPublic(false)} style={{ flex: 1, padding: "8px", borderRadius: "6px", border: "none", background: !isPublic ? "#ef4444" : "#111827", color: !isPublic ? "#fff" : "#64748b", fontWeight: "bold", cursor: "pointer" }}>🔒 Privada</button>
                   </div>
-                  {!isPublic && <input type="password" style={I} value={newLobbyPw} onChange={e => setNewLobbyPw(e.target.value)} placeholder="Defina a senha de entrada" />}
+                  {!isPublic && <input type="password" style={I} value={newLobbyPw} onChange={e => setNewLobbyPw(e.target.value)} placeholder="Defina a senha de entrada" maxLength={72} />}
                   <button onClick={handleCreateLobby} disabled={loading} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", padding: "10px", fontWeight: "bold", cursor: loading ? "wait" : "pointer" }}>
                     {loading ? "Criando..." : "Abrir Mesa de Jogo"}
                   </button>
@@ -407,7 +403,6 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
               )}
             </div>
 
-            {/* ── Suas Mesas ── */}
             {myLobbies.length > 0 && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
@@ -421,21 +416,13 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
               </div>
             )}
 
-            {/* ── Mesas Online com busca, filtros e paginação ── */}
             <div>
-              {/* Cabeçalho da seção */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "bold", letterSpacing: "0.8px" }}>
-                  MESAS ONLINE
-                </span>
+                <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "bold", letterSpacing: "0.8px" }}>MESAS ONLINE</span>
                 {filteredOtherLobbies.length !== lobbies.filter(l => l.ownerId !== user.username).length ? (
-                  <span style={{ fontSize: "10px", color: "#3b82f6" }}>
-                    {filteredOtherLobbies.length} resultado{filteredOtherLobbies.length !== 1 ? "s" : ""}
-                  </span>
+                  <span style={{ fontSize: "10px", color: "#3b82f6" }}>{filteredOtherLobbies.length} resultado{filteredOtherLobbies.length !== 1 ? "s" : ""}</span>
                 ) : (
-                  <span style={{ fontSize: "10px", color: "#475569" }}>
-                    {filteredOtherLobbies.length}
-                  </span>
+                  <span style={{ fontSize: "10px", color: "#475569" }}>{filteredOtherLobbies.length}</span>
                 )}
                 <div style={{ flex: 1, height: "1px", background: "#1e293b" }} />
                 {lastRefresh && (
@@ -445,50 +432,26 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                 )}
               </div>
 
-              {/* ── Barra de busca ── */}
               <div style={{ position: "relative", marginBottom: "10px" }}>
                 <span style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", pointerEvents: "none", color: "#475569" }}>🔍</span>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Buscar por nome ou criador..."
-                  style={{ ...I, paddingLeft: "34px", paddingRight: searchQuery ? "34px" : "10px" }}
-                />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Buscar por nome ou criador..." style={{ ...I, paddingLeft: "34px", paddingRight: searchQuery ? "34px" : "10px" }} />
                 {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", color: "#475569", fontSize: "14px", padding: 0, lineHeight: 1 }}
-                  >✕</button>
+                  <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", color: "#475569", fontSize: "14px", padding: 0, lineHeight: 1 }}>✕</button>
                 )}
               </div>
 
-              {/* ── Filtros + Ordenação ── */}
               <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap", alignItems: "center" }}>
-                {/* Chips de filtro */}
                 {(["todas", "ativas", "publicas", "privadas"] as FilterType[]).map(f => {
                   const labels: Record<FilterType, string> = { todas: "Todas", ativas: "🟢 Ativas", publicas: "🔓 Públicas", privadas: "🔒 Privadas" };
                   const isOn = filterType === f;
                   return (
-                    <button
-                      key={f}
-                      onClick={() => setFilterType(f)}
-                      style={{ padding: "4px 10px", borderRadius: "20px", border: `1px solid ${isOn ? "#f59e0b" : "#334155"}`, background: isOn ? "rgba(245,158,11,0.12)" : "transparent", color: isOn ? "#f59e0b" : "#64748b", fontSize: "11px", fontWeight: isOn ? "bold" : "normal", cursor: "pointer", whiteSpace: "nowrap" as const }}
-                    >{labels[f]}</button>
+                    <button key={f} onClick={() => setFilterType(f)} style={{ padding: "4px 10px", borderRadius: "20px", border: `1px solid ${isOn ? "#f59e0b" : "#334155"}`, background: isOn ? "rgba(245,158,11,0.12)" : "transparent", color: isOn ? "#f59e0b" : "#64748b", fontSize: "11px", fontWeight: isOn ? "bold" : "normal", cursor: "pointer", whiteSpace: "nowrap" as const }}>{labels[f]}</button>
                   );
                 })}
-
-                {/* Divisor */}
                 <div style={{ flex: 1 }} />
-
-                {/* Ordenação */}
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <span style={{ fontSize: "10px", color: "#475569", whiteSpace: "nowrap" as const }}>ordenar:</span>
-                  <select
-                    value={sortBy}
-                    onChange={e => setSortBy(e.target.value as SortType)}
-                    style={{ background: "#111827", border: "1px solid #334155", borderRadius: "6px", color: "#94a3b8", fontSize: "11px", padding: "4px 6px", cursor: "pointer" }}
-                  >
+                  <select value={sortBy} onChange={e => setSortBy(e.target.value as SortType)} style={{ background: "#111827", border: "1px solid #334155", borderRadius: "6px", color: "#94a3b8", fontSize: "11px", padding: "4px 6px", cursor: "pointer" }}>
                     <option value="atividade">Atividade</option>
                     <option value="nome">Nome A–Z</option>
                     <option value="recente">Mais recente</option>
@@ -496,23 +459,13 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                 </div>
               </div>
 
-              {/* ── Lista paginada ── */}
               {paginatedLobbies.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "36px 20px", color: "#334155", background: "#111827", borderRadius: "12px", border: "1px dashed #1e293b" }}>
-                  <div style={{ fontSize: "32px", marginBottom: "10px" }}>
-                    {searchQuery || filterType !== "todas" ? "🔎" : "🌑"}
-                  </div>
-                  <div style={{ fontWeight: "bold", color: "#374151", marginBottom: "4px" }}>
-                    {searchQuery || filterType !== "todas" ? "Nenhum resultado" : "Nenhuma mesa ativa"}
-                  </div>
-                  <div style={{ fontSize: "12px" }}>
-                    {searchQuery ? `Nada encontrado para "${searchQuery}".` : filterType !== "todas" ? "Tente outro filtro." : "Abra a primeira sessão deste plano astral."}
-                  </div>
+                  <div style={{ fontSize: "32px", marginBottom: "10px" }}>{searchQuery || filterType !== "todas" ? "🔎" : "🌑"}</div>
+                  <div style={{ fontWeight: "bold", color: "#374151", marginBottom: "4px" }}>{searchQuery || filterType !== "todas" ? "Nenhum resultado" : "Nenhuma mesa ativa"}</div>
+                  <div style={{ fontSize: "12px" }}>{searchQuery ? `Nada encontrado para "${sanitize(searchQuery)}".` : filterType !== "todas" ? "Tente outro filtro." : "Abra a primeira sessão deste plano astral."}</div>
                   {(searchQuery || filterType !== "todas") && (
-                    <button
-                      onClick={() => { setSearchQuery(""); setFilterType("todas"); }}
-                      style={{ marginTop: "10px", background: "transparent", border: "1px solid #334155", borderRadius: "6px", color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: "12px" }}
-                    >Limpar filtros</button>
+                    <button onClick={() => { setSearchQuery(""); setFilterType("todas"); }} style={{ marginTop: "10px", background: "transparent", border: "1px solid #334155", borderRadius: "6px", color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: "12px" }}>Limpar filtros</button>
                   )}
                 </div>
               ) : (
@@ -520,21 +473,13 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                   {paginatedLobbies.map(l => (
                     <LobbyCard key={l.id} l={l} isOwner={false} activity={activityPerLobby[l.id] ?? VAZIO} joinPw={joinPw[l.id] || ""} onJoinPwChange={v => setJoinPw(p => ({ ...p, [l.id]: v }))} onJoin={() => handleJoinLobby(l)} onDelete={() => handleDeleteLobby(l.id)} />
                   ))}
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    totalItems={filteredOtherLobbies.length}
-                    onPrev={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    onNext={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    onPage={setCurrentPage}
-                  />
+                  <Pagination currentPage={currentPage} totalPages={totalPages} totalItems={filteredOtherLobbies.length} onPrev={() => setCurrentPage(p => Math.max(1, p - 1))} onNext={() => setCurrentPage(p => Math.min(totalPages, p + 1))} onPage={setCurrentPage} />
                 </>
               )}
             </div>
           </div>
         )}
 
-        {/* ── ABA: PERSONAGENS ── */}
         {subTab === "chars" && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -546,7 +491,7 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
               <div key={c.id} style={{ background: "#1e293b", border: "2px solid #334155", borderRadius: "12px", padding: "14px", marginBottom: "10px", display: "flex", gap: "12px" }}>
                 {delC === c.id ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%" }}>
-                    <span style={{ color: "#f87171", flex: 1, fontSize: "14px" }}>Banir permanentemente <strong>{c.name}</strong>?</span>
+                    <span style={{ color: "#f87171", flex: 1, fontSize: "14px" }}>Banir permanentemente <strong>{sanitize(c.name)}</strong>?</span>
                     <button onClick={async () => { await onDeleteChar(c.id); setDelC(null); }} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>Sim</button>
                     <button onClick={() => setDelC(null)} style={{ background: "#374151", color: "#e2e8f0", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "12px" }}>Não</button>
                   </div>
@@ -554,9 +499,9 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                   <>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: "bold", fontSize: "15px" }}>{c.name}</span>
+                        <span style={{ fontWeight: "bold", fontSize: "15px" }}>{sanitize(c.name)}</span>
                         <span style={{ background: "#0f172a", borderRadius: "10px", padding: "1px 8px", fontSize: "11px", color: "#f59e0b" }}>Nv.{c.nivel}</span>
-                        {c.classe && <span style={{ fontSize: "12px", color: "#94a3b8" }}>{c.classe}</span>}
+                        {c.classe && <span style={{ fontSize: "12px", color: "#94a3b8" }}>{sanitize(c.classe)}</span>}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "6px" }}>
                         <div>
@@ -567,11 +512,9 @@ export default function LobbyBrowser({ user, chars, onLogout, onEnterLobby, onSa
                         </div>
                         {c.vigorMax > 0 && (
                           <div>
-                            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>
-                              {(c.bonuses as any).resourceName === "Mana" ? "💧" : "⚡"} {c.vigor}/{c.vigorMax}
-                            </div>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "2px" }}>⚡ {c.vigor}/{c.vigorMax}</div>
                             <div style={{ background: "#0f172a", borderRadius: "4px", height: "5px" }}>
-                              <div style={{ background: (c.bonuses as any).resourceName === "Mana" ? "#3b82f6" : "#f59e0b", width: `${Math.min(100, (c.vigor / c.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} />
+                              <div style={{ background: "#3b82f6", width: `${Math.min(100, (c.vigor / c.vigorMax) * 100)}%`, height: "100%", borderRadius: "4px" }} />
                             </div>
                           </div>
                         )}
