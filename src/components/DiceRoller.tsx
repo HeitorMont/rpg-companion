@@ -1,5 +1,5 @@
 // src/components/DiceRoller.tsx
-import { useState, memo } from "react";
+import { useState, useEffect, memo } from "react";
 import type { Character } from "../types";
 import { DICE, ATTRS, TC, TI, bc } from "../utils/constants";
 import { supabase } from "../lib/supabase";
@@ -37,17 +37,41 @@ interface DiceRollerProps {
 }
 
 const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, username }: DiceRollerProps) {
-  const [num, setNum] = useState(1);
-  const [dt, setDt] = useState(20);
-  const [mb, setMb] = useState(0);
-  const [fb, setFb] = useState(0);
+  // 🔮 PERSISTÊNCIA MÁGICA: Inicializa os estados a partir do sessionStorage do navegador
+  const [num, setNum] = useState(() => {
+    const saved = sessionStorage.getItem(`dice_num_${lobbyId}`);
+    return saved ? parseInt(saved) : 1;
+  });
+  const [dt, setDt] = useState(() => {
+    const saved = sessionStorage.getItem(`dice_dt_${lobbyId}`);
+    return saved ? parseInt(saved) : 20;
+  });
+  const [mb, setMb] = useState(() => {
+    const saved = sessionStorage.getItem(`dice_mb_${lobbyId}`);
+    return saved ? parseInt(saved) : 0;
+  });
+  const [fb, setFb] = useState(() => {
+    const saved = sessionStorage.getItem(`dice_fb_${lobbyId}`);
+    return saved ? parseInt(saved) : 0;
+  });
+  const [hist, setHist] = useState<any[]>(() => {
+    const saved = sessionStorage.getItem(`dice_hist_${lobbyId}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [atk, setAtk] = useState("none");
   const [rolling, setRolling] = useState(false);
   const [dispN, setDispN] = useState<number | null>(null);
   const [dispRes, setDispRes] = useState<number[] | null>(null);
   const [lastR, setLastR] = useState<any>(null);
-  const [hist, setHist] = useState<any[]>([]);
   const [showSkills, setShowSkills] = useState(false);
+
+  // 💾 SINCRONIZAÇÃO CACHE: Grava no cache local sempre que um valor for modificado pelo utilizador
+  useEffect(() => { sessionStorage.setItem(`dice_num_${lobbyId}`, num.toString()); }, [num, lobbyId]);
+  useEffect(() => { sessionStorage.setItem(`dice_dt_${lobbyId}`, dt.toString()); }, [dt, lobbyId]);
+  useEffect(() => { sessionStorage.setItem(`dice_mb_${lobbyId}`, mb.toString()); }, [mb, lobbyId]);
+  useEffect(() => { sessionStorage.setItem(`dice_fb_${lobbyId}`, fb.toString()); }, [fb, lobbyId]);
+  useEffect(() => { sessionStorage.setItem(`dice_hist_${lobbyId}`, JSON.stringify(hist)); }, [hist, lobbyId]);
 
   const doRoll = () => {
     if (rolling) return; setRolling(true); let i = 0;
@@ -72,24 +96,23 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
         const r = { id: Date.now(), label: `${num}d${dt}`, res, mb, ab, fb, bpd: bpdFinal, tb: tbFinal, num, total: totalF, attrL: attrL, isCrit: isCrit, isFail: isFail, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) };
         setLastR(r); setDispN(totalF); setDispRes(res); setHist(p => [r, ...p.slice(0, 14)]); setRolling(false);
 
-        if (!isMestre) {
-          supabase.channel(`mesa_rolls_${lobbyId}`).send({
-            type: "broadcast",
-            event: "new_roll",
-            payload: {
-              id: r.id,
-              charName: activeChar ? activeChar.name : username,
-              dice: `${num}d${dt}`,
-              res: res,
-              attr: attrL || "",
-              total: totalF,
-              bpd: bpdFinal, // 🔮 Agora ele envia o Bônus Por Dado separado!
-              fb: fb,        // 🔮 E o Bônus Fixo separado!
-              isCrit: isCrit,
-              isCritFail: isFail
-            }
-          });
-        }
+        // ⚔️ CORREÇÃO CRÍTICA: Removida a barreira 'if (!isMestre)'. Agora, dados do Mestre e de Jogadores alimentam o log unificado!
+        supabase.channel(`mesa_rolls_${lobbyId}`).send({
+          type: "broadcast",
+          event: "new_roll",
+          payload: {
+            id: r.id,
+            charName: activeChar ? activeChar.name : (isMestre ? "Mestre" : username),
+            dice: `${num}d${dt}`,
+            res: res,
+            attr: attrL || "",
+            total: totalF,
+            bpd: bpdFinal, 
+            fb: fb,        
+            isCrit: isCrit,
+            isCritFail: isFail
+          }
+        });
       }
     }, 55);
   };
@@ -162,7 +185,6 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
         </div>
       )}
       <div style={{ background: "#1e293b", borderRadius: "12px", padding: "16px", textAlign: "center" }}>
-        {/* 🔮 Atualização: Exibição moderna com os colchetes */}
         <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "2px", display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "2px" }}>
           <span>{num}d{dt}</span>
           {currentBpd !== 0 && <span style={{ color: currentBpd >= 0 ? "#4ade80" : "#f87171" }}>[{currentBpd >= 0 ? "+" : ""}{currentBpd} /dado]</span>}
@@ -183,7 +205,6 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
             {lastR.isCrit && <div style={{ color: "#fbbf24", fontWeight: "bold" }}>⭐ CRÍTICO! ⭐</div>}
             {lastR.isFail && <div style={{ color: "#ef4444", fontWeight: "bold" }}>💀 FALHA CRÍTICA!</div>}
             
-            {/* 🔮 O detalhamento da rolagem pós-resultado usando o novo padrão */}
             {(lastR.bpd !== 0 || lastR.fb !== 0) && (
               <div style={{ display: "flex", justifyContent: "center", gap: "4px", marginTop: "4px" }}>
                 {lastR.bpd !== 0 && <span style={{ color: lastR.bpd >= 0 ? "#4ade80" : "#f87171" }}>[{lastR.bpd >= 0 ? "+" : ""}{lastR.bpd} /dado]</span>}
@@ -216,7 +237,6 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
               {r.num > 1 && <span style={{ fontSize: "12px", color: "#cbd5e1", fontFamily: "monospace" }}>[{r.res.join(", ")}]</span>}
               {r.attrL && <span style={{ fontSize: "11px", color: "#60a5fa" }}>({r.attrL})</span>}
               
-              {/* 🔮 O novo formato aplicado no histórico */}
               {r.bpd !== 0 && <span style={{ fontSize: "11px", color: "#64748b" }} title={`Total extra dos dados: ${r.tb >= 0 ? "+" : ""}${r.tb}`}>[{r.bpd >= 0 ? "+" : ""}{r.bpd} /dado]</span>}
               {r.fb !== 0 && <span style={{ fontSize: "11px", color: "#a855f7" }} title="Bônus Fixo">[{r.fb >= 0 ? "+" : ""}{r.fb} Fixo]</span>}
               

@@ -96,21 +96,17 @@ const ZoomControls = memo(function ZoomControls({ cv }: { cv: any }) {
       padding: "12px 8px", display: "flex", flexDirection: "column", alignItems: "center", 
       gap: "12px", zIndex: 20, boxShadow: "0 4px 20px rgba(0,0,0,.55)", backdropFilter: "blur(4px)" 
     }}>
-      
-      {/* Botão + */}
       <button 
-        onClick={() => setZoom(Math.min(4, zoom + 0.1))} // 🔮 CORREÇÃO: Mudado de 3 para 4 (400%)
+        onClick={() => setZoom(Math.min(4, zoom + 0.1))} 
         title="Aproximar (+)" 
         style={{ background: "transparent", color: "#f59e0b", border: "none", cursor: "pointer", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px" }}
       >
         ➕
       </button>
-      
-      {/* Slider Vertical */}
       <div style={{ height: "100px", display: "flex", alignItems: "center", justifyContent: "center", width: "24px" }}>
         <input 
           type="range" 
-          min="0.1" max="4" step="0.05" // 🔮 CORREÇÃO: Mudado o max de 3 para 4 (400%)
+          min="0.1" max="4" step="0.05" 
           value={zoom} 
           onChange={e => setZoom(parseFloat(e.target.value))}
           style={{ 
@@ -118,8 +114,6 @@ const ZoomControls = memo(function ZoomControls({ cv }: { cv: any }) {
           }} 
         />
       </div>
-
-      {/* Botão - */}
       <button 
         onClick={() => setZoom(Math.max(0.1, zoom - 0.1))} 
         title="Afastar (-)" 
@@ -127,11 +121,7 @@ const ZoomControls = memo(function ZoomControls({ cv }: { cv: any }) {
       >
         ➖
       </button>
-      
-      {/* Linha Divisória */}
       <div style={{ width: "100%", height: "1px", background: "#334155", margin: "2px 0" }} />
-      
-      {/* Botão Mostrar % / Resetar */}
       <button 
         onClick={() => setZoom(1)} 
         title="Restaurar Zoom (100%)" 
@@ -139,7 +129,6 @@ const ZoomControls = memo(function ZoomControls({ cv }: { cv: any }) {
       >
         {Math.round(zoom * 100)}%
       </button>
-
     </div>
   );
 });
@@ -168,9 +157,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
 
   const cv = useCanvas(lobby.id, isMestre, tab);
 
-  // ✅ CORREÇÃO CRÍTICA: cv.color era dependência do effect de ping, fazendo com
-  // que o intervalo fosse destruído e recriado a cada mudança de cor no color picker.
-  // Usar ref garante acesso ao valor atual sem acionar o effect.
   const cvColorRef = useRef(cv.color);
   useEffect(() => { cvColorRef.current = cv.color; }, [cv.color]);
 
@@ -179,7 +165,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   useEffect(() => {
     const pingOnline = async () => {
       try {
-        let corParaEnviar = cvColorRef.current; // ✅ lê da ref, sem ser dependência
+        let corParaEnviar = cvColorRef.current; 
         if (!corDefinida.current && !isMestre) {
           const { data } = await supabase.from("members").select("color, ts, username").eq("lobby_id", lobby.id);
           if (data) {
@@ -203,10 +189,8 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
     pingOnline();
     const iv = setInterval(pingOnline, 20000);
     return () => clearInterval(iv);
-    // ✅ cv.color removido das deps — acesso via ref acima
   }, [lobby.id, member, user.username, isMestre, cv.setColor]);
 
-  // ✅ CORREÇÃO: fetchActiveMembers como useCallback estável, sem ser recriada a cada render
   const fetchActiveMembers = useCallback(async () => {
     try {
       const { data } = await supabase.from("members").select("*").eq("lobby_id", lobby.id);
@@ -230,7 +214,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
     return () => { supabase.removeChannel(canal); };
   }, [lobby.id, fetchActiveMembers]);
 
-  // ✅ CORREÇÃO: useCallback para estabilizar referência entre renders
   const handleSwitchRoleInsideGame = useCallback(async (newRole: "mestre" | "jogador" | "espectador", chosenCharId: string | null) => {
     try {
       const timestamp = Date.now();
@@ -254,13 +237,11 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   const isCanvas = tab === "mestre" || tab === "tela";
   const isAnotherMasterActive = members.some(m => m.role === "mestre" && m.username !== user.username);
 
+  // 🔮 REVOLUÇÃO: GlobalRollLog removido deste bloco interno para não desinstalar com a aba
   const canvasPanelJSX = (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 110px)", position: "relative" }}>
       <CanvasToolbar cv={cv} isMestre={isMestre} />
-      
-      {/* 🔮 O NOSSO NOVO SLIDER DE ZOOM */}
       <ZoomControls cv={cv} />
-      
       <div
         ref={cv.contRef}
         style={{ flex: 1, overflow: "hidden", background: "#0b0f19", position: "relative", touchAction: "none", cursor: cv.tool === "pan" ? "grab" : cv.tool === "select" ? "default" : "crosshair" }}
@@ -271,9 +252,6 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         <canvas ref={cv.drawRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
         <canvas ref={cv.fgRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
       </div>
-
-      {/* 🔮 O NOSSO LOG FLUTUANTE DOS DADOS */}
-      <GlobalRollLog lobbyId={lobby.id} />
     </div>
   );
 
@@ -310,19 +288,18 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       </div>
 
       <div style={{ flex: 1, overflowY: isCanvas ? "hidden" : "auto", padding: isCanvas ? "0" : "14px", display: isCanvas ? "flex" : "block", flexDirection: "column" }}>
-        {/* 🔮 Atualizado para entregar os dados ao transmissor */}
         {tab === "dados" && <DiceRoller activeChar={activeChar} lobbyId={lobby.id} isMestre={isMestre} username={user.username} />}
-        
         {tab === "personagens" && (
           <CharacterList chars={chars} member={member} user={user} isMestre={isMestre} onDeleteChar={onDeleteChar} onEditChar={handleEditChar} />
         )}
-        
         {isCanvas && canvasPanelJSX}
-        
         {tab === "sessao" && (
           <SessionPanel lobby={lobby} member={member} user={user} chars={chars} members={members} isAnotherMasterActive={isAnotherMasterActive} onSwitchRole={handleSwitchRoleInsideGame} onLeave={onLeave} />
         )}
       </div>
+
+      {/* 🔮 TRUQUE DE MESTRE: O LOG SE TORNA GLOBAL, IMORTAL E ESCUTA 100% DO TEMPO */}
+      <GlobalRollLog lobbyId={lobby.id} />
     </div>
   );
 }
