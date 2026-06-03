@@ -2,13 +2,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
+interface GlobalRollLogProps {
+  lobbyId: string;
+  visible?: boolean; // 🔮 Nova propriedade de controle visual
+}
+
+export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLogProps) {
   const [rolls, setRolls] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [hasNew, setHasNew] = useState(false);
 
   useEffect(() => {
-    // ⚔️ TRUQUE DE MESTRE: Ativamos 'self: true' para que o Supabase envie as nossas rolagens de volta para nós
     const canal = supabase.channel(`mesa_rolls_${lobbyId}`, {
       config: { broadcast: { self: true } },
     });
@@ -17,12 +21,12 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
       setRolls(prev => {
         const incoming = payload.payload;
         
-        // Evita duplicados na lista caso o cliente envie e receba ao mesmo tempo
+        // Evita duplicados na lista
         if (incoming.id && prev.some(r => r.id === incoming.id)) {
           return prev;
         }
         
-        // Adiciona no topo do histórico (índice 0)
+        // Adiciona no topo do histórico
         return [incoming, ...prev].slice(0, 50);
       }); 
       
@@ -32,7 +36,6 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
     return () => { supabase.removeChannel(canal); };
   }, [lobbyId]);
 
-  // Limpa a notificação de novos dados assim que o utilizador abre a janela
   useEffect(() => {
     if (isOpen) {
       setHasNew(false);
@@ -49,7 +52,11 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
         display: "flex", 
         flexDirection: "column-reverse", 
         gap: "8px",
-        pointerEvents: "none" 
+        pointerEvents: "none",
+        // 🔮 MÁGICA DE CAMUFLAGEM: Se não estiver visível ou não tiver dados, some visualmente do DOM sem desparar os hooks
+        visibility: visible && rolls.length > 0 ? "visible" : "hidden",
+        opacity: visible && rolls.length > 0 ? 1 : 0,
+        transition: "opacity 0.2s ease"
       }}
     >
       
@@ -80,7 +87,7 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
       >
         🎲 {isOpen ? "Ocultar Dados" : "Histórico de Dados"}
         
-        {/* Notificação vermelha pulsante caso chegue dado com a janela fechada */}
+        {/* Notificação vermelha pulsante */}
         {!isOpen && hasNew && (
           <span 
             style={{
@@ -115,7 +122,7 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
             animation: "slideUpFade 0.25s ease-out"
           }}
         >
-          {/* TOPO DA JANELA: Título e Ação de Limpar Localmente */}
+          {/* TOPO DA JANELA */}
           <div style={{ background: "#0f172a", padding: "10px 14px", borderBottom: "1px solid #1f2937", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#f59e0b", fontSize: "11px", fontWeight: "bold", letterSpacing: "0.5px" }}>
               📜 LOG DE ROLAGENS ({rolls.length})
@@ -132,7 +139,7 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
             )}
           </div>
 
-          {/* CORPO DA JANELA: Área interna com Scroll Sincronizado */}
+          {/* CORPO DA JANELA */}
           <div
             style={{
               padding: "10px",
@@ -143,57 +150,48 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
               gap: "8px"
             }}
           >
-            {rolls.length === 0 ? (
-              <div style={{ color: "#475569", fontSize: "12px", textAlign: "center", padding: "30px 10px", fontFamily: "sans-serif" }}>
-                Nenhuma jogada registrada nesta sessão.
-              </div>
-            ) : (
-              rolls.map((r, idx) => (
-                <div 
-                  key={r.id || idx} 
-                  style={{ 
-                    background: "rgba(30, 41, 59, 0.4)", 
-                    border: "1px solid #1e293b", 
-                    borderLeft: r.isCrit ? "4px solid #fde047" : r.isCritFail ? "4px solid #ef4444" : "4px solid #3b82f6", 
-                    borderRadius: "8px", 
-                    padding: "8px 12px", 
-                    color: "#e2e8f0", 
-                    display: "flex", 
-                    flexDirection: "column", 
-                    gap: "4px" 
-                  }}
-                >
-                  {/* Informações do Personagem e Atributo */}
-                  <div style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <strong style={{ color: "#fff" }}>{r.charName}</strong> 
-                      <span style={{ fontSize: "10px", color: "#64748b", marginLeft: "4px" }}>
-                        {r.attr ? `• ${r.attr}` : ""}
-                      </span>
-                    </div>
-                    {r.isCrit && <span style={{ color: "#fde047", fontWeight: "bold", fontSize: "10px" }}>⭐ CRÍTICO</span>}
-                    {r.isCritFail && <span style={{ color: "#fca5a5", fontWeight: "bold", fontSize: "10px" }}>💀 FALHA</span>}
+            {rolls.map((r, idx) => (
+              <div 
+                key={r.id || idx} 
+                style={{ 
+                  background: "rgba(30, 41, 59, 0.4)", 
+                  border: "1px solid #1e293b", 
+                  borderLeft: r.isCrit ? "4px solid #fde047" : r.isCritFail ? "4px solid #ef4444" : "4px solid #3b82f6", 
+                  borderRadius: "8px", 
+                  padding: "8px 12px", 
+                  color: "#e2e8f0", 
+                  display: "flex", 
+                  flexDirection: "column", 
+                  gap: "4px" 
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <strong style={{ color: "#fff" }}>{r.charName}</strong> 
+                    <span style={{ fontSize: "10px", color: "#64748b", marginLeft: "4px" }}>
+                      {r.attr ? `• ${r.attr}` : ""}
+                    </span>
                   </div>
-                  
-                  {/* Linha Matemática + Resultado Unificados Horizontalmente */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", fontSize: "12px", fontFamily: "monospace" }}>
-                      <span style={{ color: "#cbd5e1" }}>{r.dice}</span>
-                      {r.res && r.res.length > 0 && (
-                        <span style={{ color: "#64748b" }}>[{r.res.join(",")}]</span>
-                      )}
-                      {r.bpd ? <span style={{ color: r.bpd >= 0 ? "#4ade80" : "#fca5a5" }}>({r.bpd >= 0 ? "+" : ""}{r.bpd}/d)</span> : null}
-                      {r.fb ? <span style={{ color: r.fb >= 0 ? "#a855f7" : "#fca5a5" }}>({r.fb >= 0 ? "+" : ""}{r.fb}F)</span> : null}
-                    </div>
-
-                    <div style={{ fontSize: "20px", fontWeight: "bold", color: r.isCrit ? "#fde047" : r.isCritFail ? "#fca5a5" : "#fff", textShadow: r.isCrit ? "0 0 8px rgba(253, 224, 71, 0.3)" : "none" }}>
-                      {r.total}
-                    </div>
-                  </div>
-
+                  {r.isCrit && <span style={{ color: "#fde047", fontWeight: "bold", fontSize: "10px" }}>⭐ CRÍTICO</span>}
+                  {r.isCritFail && <span style={{ color: "#fca5a5", fontWeight: "bold", fontSize: "10px" }}>💀 FALHA</span>}
                 </div>
-              ))
-            )}
+                
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", fontSize: "12px", fontFamily: "monospace" }}>
+                    <span style={{ color: "#cbd5e1" }}>{r.dice}</span>
+                    {r.res && r.res.length > 0 && (
+                      <span style={{ color: "#64748b" }}>[{r.res.join(",")}]</span>
+                    )}
+                    {r.bpd ? <span style={{ color: r.bpd >= 0 ? "#4ade80" : "#fca5a5" }}>({r.bpd >= 0 ? "+" : ""}{r.bpd}/d)</span> : null}
+                    {r.fb ? <span style={{ color: r.fb >= 0 ? "#a855f7" : "#fca5a5" }}>({r.fb >= 0 ? "+" : ""}{r.fb}F)</span> : null}
+                  </div>
+
+                  <div style={{ fontSize: "20px", fontWeight: "bold", color: r.isCrit ? "#fde047" : r.isCritFail ? "#fca5a5" : "#fff" }}>
+                    {r.total}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

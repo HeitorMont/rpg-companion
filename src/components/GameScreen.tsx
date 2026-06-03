@@ -299,7 +299,8 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
       </div>
 
       {/* 🔮 TRUQUE DE MESTRE: O LOG SE TORNA GLOBAL, IMORTAL E ESCUTA 100% DO TEMPO */}
-      <GlobalRollLog lobbyId={lobby.id} />
+      {/* Passamos o 'visible' para ocultar visualmente nas outras abas sem perder o estado */}
+      <GlobalRollLog lobbyId={lobby.id} visible={isCanvas} />
     </div>
   );
 }
