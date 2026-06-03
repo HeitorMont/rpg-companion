@@ -8,18 +8,31 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
   const [hasNew, setHasNew] = useState(false);
 
   useEffect(() => {
-    const canal = supabase.channel(`mesa_rolls_${lobbyId}`);
+    // ⚔️ TRUQUE DE MESTRE: Ativamos 'self: true' para que o Supabase envie as nossas rolagens de volta para nós
+    const canal = supabase.channel(`mesa_rolls_${lobbyId}`, {
+      config: { broadcast: { self: true } },
+    });
     
     canal.on("broadcast", { event: "new_roll" }, (payload) => {
-      // Adiciona no topo (índice 0) para que o dado mais recente fique sempre visível primeiro
-      setRolls(prev => [payload.payload, ...prev].slice(0, 50)); 
+      setRolls(prev => {
+        const incoming = payload.payload;
+        
+        // Evita duplicados na lista caso o cliente envie e receba ao mesmo tempo
+        if (incoming.id && prev.some(r => r.id === incoming.id)) {
+          return prev;
+        }
+        
+        // Adiciona no topo do histórico (índice 0)
+        return [incoming, ...prev].slice(0, 50);
+      }); 
+      
       setHasNew(true);
     }).subscribe();
 
     return () => { supabase.removeChannel(canal); };
   }, [lobbyId]);
 
-  // Limpa a notificação de novos dados assim que o usuário abre a janela
+  // Limpa a notificação de novos dados assim que o utilizador abre a janela
   useEffect(() => {
     if (isOpen) {
       setHasNew(false);
@@ -36,7 +49,6 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
         display: "flex", 
         flexDirection: "column-reverse", 
         gap: "8px",
-        // Apenas o container não bloqueia cliques, as janelas internas reativam o clique
         pointerEvents: "none" 
       }}
     >
@@ -90,7 +102,7 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
       {isOpen && (
         <div
           style={{
-            pointerEvents: "auto", // Reativa cliques para permitir rolagem e interações
+            pointerEvents: "auto",
             width: "320px",
             background: "rgba(15, 23, 42, 0.95)",
             border: "1px solid #334155",
@@ -163,7 +175,7 @@ export default function GlobalRollLog({ lobbyId }: { lobbyId: string }) {
                     {r.isCritFail && <span style={{ color: "#fca5a5", fontWeight: "bold", fontSize: "10px" }}>💀 FALHA</span>}
                   </div>
                   
-                  {/* Linha Matemática + Resultado Unificados Horizontalmente para Otimizar Espaço */}
+                  {/* Linha Matemática + Resultado Unificados Horizontalmente */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", fontSize: "12px", fontFamily: "monospace" }}>
                       <span style={{ color: "#cbd5e1" }}>{r.dice}</span>
