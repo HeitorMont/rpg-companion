@@ -55,7 +55,9 @@ export default function CharEditor({char, owner, onSave, onCancel}: CharEditorPr
   const [c, setC] = useState<Character>(() => ({ ...fChar(owner), ...char, bonuses: { ...fBon(), ...(char?.bonuses || {}) }, skills: char?.skills ?? [] }));
   
   const set = (k: keyof Character, v: any) => setC(p => ({ ...p, [k]: v }));
-  const setB = (k: string, v: string) => setC(p => ({ ...p, bonuses: { ...p.bonuses, [k]: parseInt(v) || 0 } }));
+  
+  // Modificado para aceitar string vazia temporariamente nos atributos
+  const setB = (k: string, v: any) => setC(p => ({ ...p, bonuses: { ...p.bonuses, [k]: v === "" ? "" : (parseInt(v) || 0) } as any }));
   
   return (
     <div style={{background:"#1f2937",borderRadius:"12px",padding:"16px",maxWidth:"540px",margin:"0 auto"}}>
@@ -68,17 +70,35 @@ export default function CharEditor({char, owner, onSave, onCancel}: CharEditorPr
             <div key={k}><label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>{l}</label>
             <input style={I} value={c[k as keyof Character] as string} onChange={e => set(k as keyof Character,e.target.value)} placeholder={p}/></div>
           ))}
-          <div><label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>NÍVEL</label>
-          <input style={I} type="number" min="1" value={c.nivel} onChange={e => set("nivel",Math.max(1,parseInt(e.target.value)||1))}/></div>
+          
+          {/* NÍVEL CORRIGIDO */}
+          <div>
+            <label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>NÍVEL</label>
+            <input 
+              style={I} 
+              type="number" 
+              value={c.nivel} 
+              onChange={e => {
+                const val = e.target.value;
+                set("nivel", val === "" ? "" : parseInt(val));
+              }}
+              onBlur={() => {
+                if (!c.nivel || c.nivel < 1) {
+                  set("nivel", 1);
+                }
+              }}
+            />
+          </div>
         </div>
         <div>
-          {/* 🔮 TRUQUE DE MESTRE: Botões de Escolha de Energia */}
+          {/* Botões de Escolha de Energia */}
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
             <label style={{ color: "#9ca3af", fontSize: "11px", fontWeight: "bold" }}>ENERGIA:</label>
             <button onClick={() => setC(p => ({...p, bonuses: {...p.bonuses, resourceName: "Vigor"} as any}))} style={{ flex: 1, background: (c.bonuses as any).resourceName === "Mana" ? "#111827" : "#f59e0b", color: (c.bonuses as any).resourceName === "Mana" ? "#64748b" : "#111", border: (c.bonuses as any).resourceName === "Mana" ? "1px solid #334155" : "none", borderRadius: "6px", padding: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "12px", transition: ".2s" }}>⚡ Vigor</button>
             <button onClick={() => setC(p => ({...p, bonuses: {...p.bonuses, resourceName: "Mana"} as any}))} style={{ flex: 1, background: (c.bonuses as any).resourceName === "Mana" ? "#3b82f6" : "#111827", color: (c.bonuses as any).resourceName === "Mana" ? "#fff" : "#64748b", border: (c.bonuses as any).resourceName !== "Mana" ? "1px solid #334155" : "none", borderRadius: "6px", padding: "6px", fontWeight: "bold", cursor: "pointer", fontSize: "12px", transition: ".2s" }}>💧 Mana</button>
           </div>
 
+          {/* VIDA, VIDA MÁXIMA, VIGOR E VIGOR MÁXIMO CORRIGIDOS */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px"}}>
             {[
               ["hp", "❤️ HP"],
@@ -86,22 +106,74 @@ export default function CharEditor({char, owner, onSave, onCancel}: CharEditorPr
               ["vigor", (c.bonuses as any).resourceName === "Mana" ? "💧 MANA" : "⚡ VIGOR"],
               ["vigorMax", "MÁXIMO"]
             ].map(([k,l]) => (
-              <div key={k}><label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>{l}</label>
-              <input style={I} type="number" value={c[k as keyof Character] as number} onChange={e => set(k as keyof Character, parseInt(e.target.value)||0)}/></div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label style={{color:"#f59e0b",fontSize:"13px",fontWeight:"bold",display:"block",marginBottom:"6px"}}>🎯 Bônus de Atributos</label>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px"}}>
-            {ATTRS.map(a => (
-              <div key={a.key} style={{background:"#111827",borderRadius:"8px",padding:"8px",textAlign:"center"}}>
-                <div style={{color:"#f59e0b",fontSize:"11px",fontWeight:"bold",marginBottom:"4px"}}>{a.short}</div>
-                <input type="number" style={{...I,textAlign:"center",padding:"4px",width:"56px"}} value={c.bonuses[a.key]} onChange={e => setB(a.key,e.target.value)}/>
+              <div key={k}>
+                <label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>{l}</label>
+                <input 
+                  style={I} 
+                  type="number" 
+                  value={c[k as keyof Character] as any} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    set(k as keyof Character, val === "" ? "" : parseInt(val));
+                  }}
+                  onBlur={() => {
+                    // Se sair do campo e estiver vazio, reverte com segurança para 0
+                    if ((c[k as keyof Character] as any) === "") {
+                      set(k as keyof Character, 0);
+                    }
+                  }}
+                />
               </div>
             ))}
           </div>
         </div>
+        
+        {/* ATRIBUTOS COM BOTOES (+/-) E CORREÇÃO DE ESCRITA DELETÁVEL */}
+        <div>
+          <label style={{color:"#f59e0b",fontSize:"13px",fontWeight:"bold",display:"block",marginBottom:"6px"}}>🎯 Bônus de Atributos</label>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px"}}>
+            {ATTRS.map(a => {
+              const currentVal = parseInt(c.bonuses[a.key] as any) || 0;
+              return (
+                <div key={a.key} style={{background:"#111827",borderRadius:"8px",padding:"6px 4px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
+                  <div style={{color:"#f59e0b",fontSize:"11px",fontWeight:"bold"}}>{a.short}</div>
+                  
+                  <div style={{display:"flex",alignItems:"center",background:"#1f2937",borderRadius:"6px",border:"1px solid #374151",overflow:"hidden",width:"100%",justifyContent:"space-between"}}>
+                    <button
+                      type="button"
+                      onClick={() => setB(a.key, String(currentVal - 1))}
+                      style={{background:"transparent",color:"#9ca3af",border:"none",cursor:"pointer",fontWeight:"bold",padding:"4px 8px",fontSize:"16px",userSelect:"none"}}
+                    >
+                      −
+                    </button>
+
+                    <input 
+                      type="number" 
+                      style={{...I,background:"transparent",border:"none",textAlign:"center",padding:"4px 0",width:"24px",margin:0,fontSize:"13px",fontWeight:"bold"}} 
+                      value={c.bonuses[a.key]} 
+                      onChange={e => setB(a.key, e.target.value)}
+                      onBlur={() => {
+                        // Se apagar tudo e clicar fora, garante o retorno do valor 0
+                        if ((c.bonuses[a.key] as any) === "") {
+                          setB(a.key, 0);
+                        }
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setB(a.key, String(currentVal + 1))}
+                      style={{background:"transparent",color:"#9ca3af",border:"none",cursor:"pointer",fontWeight:"bold",padding:"4px 8px",fontSize:"16px",userSelect:"none"}}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        
         <SkillEditor skills={c.skills} onChange={sk => set("skills", sk)}/>
         <div><label style={{color:"#9ca3af",fontSize:"11px",fontWeight:"bold"}}>ANOTAÇÕES</label>
         <textarea style={{...I,minHeight:"56px",resize:"vertical"}} value={c.notes} onChange={e => set("notes",e.target.value)} placeholder="Inventário, história..."/></div>
