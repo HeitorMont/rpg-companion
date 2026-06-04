@@ -1,7 +1,4 @@
 // src/components/SessionPanel.tsx
-// ✅ CORREÇÃO: memo() — este painel re-renderizava a cada movimento do mouse no
-// canvas porque recebia `members` como prop e estava em GameScreen. Com memo,
-// só re-renderiza quando members, member ou chars realmente mudam.
 import { memo } from "react";
 import type { Lobby, Member, Character, User } from "../types";
 import { I } from "../utils/constants";
