@@ -4,10 +4,11 @@ import { supabase } from "../lib/supabase";
 
 interface GlobalRollLogProps {
   lobbyId: string;
-  visible?: boolean; // 🔮 Nova propriedade de controle visual
+  visible?: boolean;
+  isMestre?: boolean; // 🔮 Propriedade para validar o Escudo do Mestre
 }
 
-export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLogProps) {
+export default function GlobalRollLog({ lobbyId, visible = true, isMestre = false }: GlobalRollLogProps) {
   const [rolls, setRolls] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [hasNew, setHasNew] = useState(false);
@@ -18,15 +19,17 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
     });
     
     canal.on("broadcast", { event: "new_roll" }, (payload) => {
+      const incoming = payload.payload;
+      
+      // 🛡️ ESCUDO DO MESTRE: Se for uma rolagem secreta e quem está olhando NÃO for o mestre, barra o dado!
+      if (incoming.isSecret && !isMestre) {
+        return;
+      }
+      
       setRolls(prev => {
-        const incoming = payload.payload;
-        
-        // Evita duplicados na lista
         if (incoming.id && prev.some(r => r.id === incoming.id)) {
           return prev;
         }
-        
-        // Adiciona no topo do histórico
         return [incoming, ...prev].slice(0, 50);
       }); 
       
@@ -34,7 +37,7 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
     }).subscribe();
 
     return () => { supabase.removeChannel(canal); };
-  }, [lobbyId]);
+  }, [lobbyId, isMestre]);
 
   useEffect(() => {
     if (isOpen) {
@@ -53,14 +56,12 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
         flexDirection: "column-reverse", 
         gap: "8px",
         pointerEvents: "none",
-        // 🔮 MÁGICA DE CAMUFLAGEM: Se não estiver visível ou não tiver dados, some visualmente do DOM sem desparar os hooks
         visibility: visible && rolls.length > 0 ? "visible" : "hidden",
         opacity: visible && rolls.length > 0 ? 1 : 0,
         transition: "opacity 0.2s ease"
       }}
     >
       
-      {/* 🎲 BOTÃO FLUTUANTE PARA ABRIR/FECHAR O HISTÓRICO */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -87,7 +88,6 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
       >
         🎲 {isOpen ? "Ocultar Dados" : "Histórico de Dados"}
         
-        {/* Notificação vermelha pulsante */}
         {!isOpen && hasNew && (
           <span 
             style={{
@@ -105,7 +105,6 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
         )}
       </button>
 
-      {/* 📜 JANELA DO CHAT DE HISTÓRICO ROLÁVEL */}
       {isOpen && (
         <div
           style={{
@@ -122,7 +121,6 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
             animation: "slideUpFade 0.25s ease-out"
           }}
         >
-          {/* TOPO DA JANELA */}
           <div style={{ background: "#0f172a", padding: "10px 14px", borderBottom: "1px solid #1f2937", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#f59e0b", fontSize: "11px", fontWeight: "bold", letterSpacing: "0.5px" }}>
               📜 LOG DE ROLAGENS ({rolls.length})
@@ -139,24 +137,14 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
             )}
           </div>
 
-          {/* CORPO DA JANELA */}
-          <div
-            style={{
-              padding: "10px",
-              maxHeight: "280px",
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px"
-            }}
-          >
+          <div style={{ padding: "10px", maxHeight: "280px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
             {rolls.map((r, idx) => (
               <div 
                 key={r.id || idx} 
                 style={{ 
-                  background: "rgba(30, 41, 59, 0.4)", 
-                  border: "1px solid #1e293b", 
-                  borderLeft: r.isCrit ? "4px solid #fde047" : r.isCritFail ? "4px solid #ef4444" : "4px solid #3b82f6", 
+                  background: r.isSecret ? "rgba(88, 28, 135, 0.2)" : "rgba(30, 41, 59, 0.4)", 
+                  border: r.isSecret ? "1px solid #5b21b6" : "1px solid #1e293b", 
+                  borderLeft: r.isCrit ? "4px solid #fde047" : r.isCritFail ? "4px solid #ef4444" : r.isSecret ? "4px solid #a855f7" : "4px solid #3b82f6", 
                   borderRadius: "8px", 
                   padding: "8px 12px", 
                   color: "#e2e8f0", 
@@ -172,8 +160,11 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
                       {r.attr ? `• ${r.attr}` : ""}
                     </span>
                   </div>
-                  {r.isCrit && <span style={{ color: "#fde047", fontWeight: "bold", fontSize: "10px" }}>⭐ CRÍTICO</span>}
-                  {r.isCritFail && <span style={{ color: "#fca5a5", fontWeight: "bold", fontSize: "10px" }}>💀 FALHA</span>}
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    {r.isSecret && <span style={{ color: "#c084fc", fontWeight: "bold", fontSize: "10px" }}>🕵️ SECRETA</span>}
+                    {r.isCrit && <span style={{ color: "#fde047", fontWeight: "bold", fontSize: "10px" }}>⭐ CRÍTICO</span>}
+                    {r.isCritFail && <span style={{ color: "#fca5a5", fontWeight: "bold", fontSize: "10px" }}>💀 FALHA</span>}
+                  </div>
                 </div>
                 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
@@ -196,7 +187,6 @@ export default function GlobalRollLog({ lobbyId, visible = true }: GlobalRollLog
         </div>
       )}
 
-      {/* 🔮 ANIMAÇÕES INJETADAS */}
       <style>{`
         @keyframes slideUpFade {
           from { opacity: 0; transform: translateY(10px); }

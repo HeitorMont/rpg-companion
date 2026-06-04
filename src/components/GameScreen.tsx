@@ -7,7 +7,7 @@ import CharEditor from "./CharEditor";
 import DiceRoller from "./DiceRoller";
 import CharacterList from "./CharacterList";
 import SessionPanel from "./SessionPanel";
-import GlobalRollLog from "./GlobalRollLog"; // 🔮 Importando o nosso painel fantasma de rolagens
+import GlobalRollLog from "./GlobalRollLog"; 
 import { PAL } from "../utils/constants";
 
 /* ── Canvas Toolbar ──────────────────────────────────────────────────────────── */
@@ -81,55 +81,6 @@ const CanvasToolbar = memo(function CanvasToolbar({ cv, isMestre }: CanvasToolba
         </div>
       )}
     </>
-  );
-});
-
-/* ── Zoom Controls ───────────────────────────────────────────────────────────── */
-const ZoomControls = memo(function ZoomControls({ cv }: { cv: any }) {
-  const zoom = cv.zoom || 1;
-  const setZoom = cv.setZoom || (() => {});
-
-  return (
-    <div style={{ 
-      position: "absolute", right: "20px", top: "50%", transform: "translateY(-50%)", 
-      background: "rgba(30, 41, 59, 0.9)", border: "1px solid #334155", borderRadius: "12px", 
-      padding: "12px 8px", display: "flex", flexDirection: "column", alignItems: "center", 
-      gap: "12px", zIndex: 20, boxShadow: "0 4px 20px rgba(0,0,0,.55)", backdropFilter: "blur(4px)" 
-    }}>
-      <button 
-        onClick={() => setZoom(Math.min(4, zoom + 0.1))} 
-        title="Aproximar (+)" 
-        style={{ background: "transparent", color: "#f59e0b", border: "none", cursor: "pointer", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px" }}
-      >
-        ➕
-      </button>
-      <div style={{ height: "100px", display: "flex", alignItems: "center", justifyContent: "center", width: "24px" }}>
-        <input 
-          type="range" 
-          min="0.1" max="4" step="0.05" 
-          value={zoom} 
-          onChange={e => setZoom(parseFloat(e.target.value))}
-          style={{ 
-            transform: "rotate(-90deg)", width: "100px", cursor: "pointer", accentColor: "#f59e0b" 
-          }} 
-        />
-      </div>
-      <button 
-        onClick={() => setZoom(Math.max(0.1, zoom - 0.1))} 
-        title="Afastar (-)" 
-        style={{ background: "transparent", color: "#f59e0b", border: "none", cursor: "pointer", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px" }}
-      >
-        ➖
-      </button>
-      <div style={{ width: "100%", height: "1px", background: "#334155", margin: "2px 0" }} />
-      <button 
-        onClick={() => setZoom(1)} 
-        title="Restaurar Zoom (100%)" 
-        style={{ background: "transparent", color: "#94a3b8", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold", padding: 0 }}
-      >
-        {Math.round(zoom * 100)}%
-      </button>
-    </div>
   );
 });
 
@@ -237,11 +188,9 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
   const isCanvas = tab === "mestre" || tab === "tela";
   const isAnotherMasterActive = members.some(m => m.role === "mestre" && m.username !== user.username);
 
-  // 🔮 REVOLUÇÃO: GlobalRollLog removido deste bloco interno para não desinstalar com a aba
   const canvasPanelJSX = (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 110px)", position: "relative" }}>
       <CanvasToolbar cv={cv} isMestre={isMestre} />
-      <ZoomControls cv={cv} />
       <div
         ref={cv.contRef}
         style={{ flex: 1, overflow: "hidden", background: "#0b0f19", position: "relative", touchAction: "none", cursor: cv.tool === "pan" ? "grab" : cv.tool === "select" ? "default" : "crosshair" }}
@@ -298,9 +247,7 @@ export default function GameScreen({ user, lobby, member, chars, onLeave, onSave
         )}
       </div>
 
-      {/* 🔮 TRUQUE DE MESTRE: O LOG SE TORNA GLOBAL, IMORTAL E ESCUTA 100% DO TEMPO */}
-      {/* Passamos o 'visible' para ocultar visualmente nas outras abas sem perder o estado */}
-      <GlobalRollLog lobbyId={lobby.id} visible={isCanvas} />
+      <GlobalRollLog lobbyId={lobby.id} visible={isCanvas} isMestre={isMestre} />
     </div>
   );
 }

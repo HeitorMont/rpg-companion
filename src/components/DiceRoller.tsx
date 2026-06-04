@@ -37,7 +37,6 @@ interface DiceRollerProps {
 }
 
 const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, username }: DiceRollerProps) {
-  // 🔮 PERSISTÊNCIA MÁGICA: Inicializa os estados a partir do sessionStorage do navegador
   const [num, setNum] = useState(() => {
     const saved = sessionStorage.getItem(`dice_num_${lobbyId}`);
     return saved ? parseInt(saved) : 1;
@@ -59,6 +58,8 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [isSecret, setIsSecret] = useState(isMestre);
+
   const [atk, setAtk] = useState("none");
   const [rolling, setRolling] = useState(false);
   const [dispN, setDispN] = useState<number | null>(null);
@@ -66,7 +67,6 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
   const [lastR, setLastR] = useState<any>(null);
   const [showSkills, setShowSkills] = useState(false);
 
-  // 💾 SINCRONIZAÇÃO CACHE: Grava no cache local sempre que um valor for modificado pelo utilizador
   useEffect(() => { sessionStorage.setItem(`dice_num_${lobbyId}`, num.toString()); }, [num, lobbyId]);
   useEffect(() => { sessionStorage.setItem(`dice_dt_${lobbyId}`, dt.toString()); }, [dt, lobbyId]);
   useEffect(() => { sessionStorage.setItem(`dice_mb_${lobbyId}`, mb.toString()); }, [mb, lobbyId]);
@@ -96,7 +96,6 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
         const r = { id: Date.now(), label: `${num}d${dt}`, res, mb, ab, fb, bpd: bpdFinal, tb: tbFinal, num, total: totalF, attrL: attrL, isCrit: isCrit, isFail: isFail, time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) };
         setLastR(r); setDispN(totalF); setDispRes(res); setHist(p => [r, ...p.slice(0, 14)]); setRolling(false);
 
-        // ⚔️ CORREÇÃO CRÍTICA: Removida a barreira 'if (!isMestre)'. Agora, dados do Mestre e de Jogadores alimentam o log unificado!
         supabase.channel(`mesa_rolls_${lobbyId}`).send({
           type: "broadcast",
           event: "new_roll",
@@ -110,7 +109,8 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
             bpd: bpdFinal, 
             fb: fb,        
             isCrit: isCrit,
-            isCritFail: isFail
+            isCritFail: isFail,
+            isSecret: isSecret
           }
         });
       }
@@ -213,6 +213,20 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
             )}
           </div>
         )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center", marginBottom: "12px" }}>
+          <input 
+            type="checkbox" 
+            id="secret-roll" 
+            checked={isSecret} 
+            onChange={e => setIsSecret(e.target.checked)} 
+            style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "#f59e0b" }}
+          />
+          <label htmlFor="secret-roll" style={{ color: "#94a3b8", fontSize: "13px", fontWeight: "bold", cursor: "pointer", userSelect: "none" }}>
+            🕵️ Rolagem Secreta (Apenas Mestre vê)
+          </label>
+        </div>
+
         <button onClick={doRoll} disabled={rolling} style={{ background: rolling ? "#374151" : "#f59e0b", color: rolling ? "#64748b" : "#111", border: "none", borderRadius: "10px", padding: "12px", fontSize: "17px", fontWeight: "bold", cursor: rolling ? "not-allowed" : "pointer", width: "100%", boxShadow: rolling ? "none" : "0 4px 14px #f59e0b55" }}>
           {rolling ? "🎲 Rolando..." : "🎲 Rolar!"}
         </button>
@@ -228,7 +242,7 @@ const DiceRoller = memo(function DiceRoller({ activeChar, lobbyId, isMestre, use
       )}
       {hist.length > 0 && (
         <div style={{ background: "#1e293b", borderRadius: "10px", padding: "12px" }}>
-          <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold", marginBottom: "6px" }}>HISTÓRICO</div>
+          <div style={{ color: "#64748b", fontSize: "11px", fontWeight: "bold", marginBottom: "6px" }}>HISTÓRICO LOCAL</div>
           {hist.map((r, i) => (
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 6px", borderRadius: "6px", background: i === 0 ? "#111827" : "transparent", marginBottom: "2px", opacity: Math.max(.4, 1 - i * .06), flexWrap: "wrap" }}>
               <span style={{ fontSize: "11px", color: "#475569", minWidth: "34px" }}>{r.time}</span>
