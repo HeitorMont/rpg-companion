@@ -3,7 +3,7 @@ import { memo } from "react";
 import type { Lobby, Member, Character, User } from "../types";
 import { I } from "../utils/constants";
 
-
+//teste
 interface SessionPanelProps {
   lobby: Lobby;
   member: Member;
